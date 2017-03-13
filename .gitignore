@@ -87,3 +87,19 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+
+##########################
+# LaTeX stuff
+
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.out
+*.aux
+
+
+##########################
+# Archives
+*.gz
