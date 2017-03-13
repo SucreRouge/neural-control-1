@@ -1,0 +1,405 @@
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{cite}
+
+\input{preamble}
+
+\begin{document}
+  \title{On the Problems of Using Gradient Descent to Optimize PID Gains}
+  \author{Erik Schultheis}
+  \maketitle
+
+  \clearpage
+  \section{Introduction}
+    In any kind of technical system $\state(t)$ that should automatically 
+    be held in a state $\setpoint(t)$ (i.e. error $\error(t) := \setpoint(t) - \state(t)$ is minimized) 
+    some form of control is necessary. 
+    Except for the most simple cases, this requires a feedback loop which produces a 
+    control output $\control(t) = \control(\state(t), \setpoint(t))$ that influences the system.
+
+
+    One such algorithm that is often used due to its simplicity is the PID controller. 
+    In this case $\control$ is a linear superposition of the current error, 
+    the change rate in the error and the integral over all past errors
+    \begin{align}
+        \control(T) = p \error(T) + d \dot{\error}(T) + i \int_0^T \error(t) \dt. \label{eq:control_equation}
+    \end{align}
+
+    This algorithm works reasonably well for many systems.
+    There are two drawbacks that one would like to improve: The algorithm requires 
+    the three parameters $p, i, d$ to be tuned, and their optimal values may depend 
+    on the current operating regime. Further, long time delays or strong nonlinearities in the system reduce the 
+    effectiveness of PID control \cite{}.
+    Therefore, extensions to PID control have been 
+    proposed that borrow ideas from neural networks \cite{cong_novel_2005,yu_applying_2006,shu_pid_2000}.
+
+    While there exist different variations for neural PIDs in the literature, 
+    the basic idea remains the same: We consider the PID parameters $p, i, d$ as dynamical parameters 
+    (weights in the language of neural networks) and try to optimize them such that a 
+    loss function $L$ is minimized. 
+    The loss function is chosen to be the squared error loss 
+    \begin{align}
+        L(T) = 0.5 \int_0^T \error(t)^2 \dt. \label{eq:l2loss}
+    \end{align}
+    In \cite{shu_pid_2000} the neurons additionaly possess a nonlinear activation function, in \cite{} 
+    the input to the neurons (the error term) is modelled by additional parameters 
+    $\error = \alpha \setpoint + \beta \state$.
+
+
+    In the following we want to show that this idea, though working well in certain circumstances, 
+    has some fundamental flaws. For that, we will fist apply the algorithm to simple test cases to 
+    demonstrate where the problems arise. Section \ref{sq:L2Loss} then follows with an analysis why 
+    the squared error loss might be a very bad metric to optimize. 
+
+
+
+
+
+
+  \section{PIDNN control examples}
+    For simple testing purposes, we  consider a linear second order plant of the form
+    \begin{align}
+        \ddot{\state} = a \dot{\state} + b \state,
+    \end{align}
+    which we want to control with an input $\control$ which acts as a force term
+    \begin{align}
+        \ddot{\state} = a \dot{\state} + b \state + c \control. \label{eq:qe_of_motion_system}
+    \end{align}
+    The control term is calculated as for a PID controller according to equation \eqref{eq:control_equation}. 
+    We call $w = (p, i, d)$ the parameter or weight vector. 
+    We will be switching between discrete and continuous time formulations, 
+    where $\att{t}{k} \define k \cdot \Delta t$ and in general $\att{x}{k} \define x(\att{t}{k})$.
+
+
+    The update rule for the weights that is used in the literature \cite{cong_novel_2005} 
+    (termed \emph{resilient backpropagation}) constitutes a very crude approximation to gradient descend
+    \begin{align}
+        \att{w}{k+1} &= \att{w}{k} + \learningrate \left( \att{\error}{k} \cdot 
+                        \sign \left(\frac{\att{\state}{k+1} - \att{\state}{k}}{\att{\control}{k} 
+                        - \att{\control}{k-1}}\right) \cdot 
+                        \pdiv{\att{\control}{k}}{w}\right), \label{eq:diffq_pidnn}
+    \end{align}
+    where $\learningrate$ denotes the learning rate. 
+
+    The success of this method can be seen in figure \ref{fig:demo}, where we a classical PID 
+    and its adaptive counterpart, for exactly the same configuration and initial weights. 
+    The PIDNN managed to reduce the total loss from $5.15$ to $3.68$. However, the learning drives the PIDNN towards a 
+    parameter regime where it becomes unstable, as can be seen in \ref{fig:demo:diverging} where the setpoint following 
+    a rectangular function makes it impossible for the learning to stop. 
+
+    \begin{figure}[tb]
+    \begin{subfigure}[c]{0.5\textwidth}
+        \includegraphics[width=1.0\textwidth]{code/demo1.pdf}
+        \subcaption{Constant Setpoint}
+        \label{fig:demo:converging}
+    \end{subfigure}
+    \begin{subfigure}[c]{0.5\textwidth}
+        \includegraphics[width=1.0\textwidth]{code/demo2.pdf}
+        \subcaption{Alternating Setpoint}
+        \label{fig:demo:diverging}
+    \end{subfigure}
+    \caption{Application of the PIDNN algorithm to the system \eqref{eq:qe_of_motion_system}, for a constant setpoint 
+    and a setpoint following a rect function. For reference
+    the system development with a PID controller that has the same starting weights as the PIDNN is shown.}
+    \label{fig:demo}
+    \end{figure}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  \section{Stability Analysis}
+    This example shows that the PIDNN can play havoc with system stability. The following sections investigate why and 
+    under which conditions this happens. 
+
+    The aim of finding optimal PID weights through gradient descent with respect to the loss function eq. 
+    \eqref{eq:l2loss} can be cast in two different ways. Either aim at finding constant weights that minimize the loss 
+    over all time, or start to consider the weights as truly dynamical parameters and use locally optimal values.
+
+
+
+  \subsection{Global Loss Minimization}
+    \label{sq:L2Loss}
+    To investigate the objective that the loss function tries to optimize globally, we first derive the combined 
+    equations of motion of \eqref{eq:qe_of_motion_system} and \eqref{eq:control_equation}.
+    We will from now on assume a problem where the setpoint is fixed ($\setpoint(t) = \const$).
+    This gives an inhomogeneous ODE with constant coefficients 
+    \begin{align}
+        \ddot{\state} &= a \dot{\state} + b \state + c p (\setpoint - \state) + c d \left( \dot{\setpoint} - \dot{\state} \right)\\ \nonumber
+        &\eqqcolon 2\gamma  \dot{\state} - \beta \state + c p \setpoint
+    \end{align}
+
+    Let now $\omega=\sqrt{\beta-\gamma^2}$ and  $\kappa_{1,2} = \gamma \pm i \omega$, then the solution for 
+    $\state(0) = 0$ and $\dot{\state}(0) = 0$ becomes
+    \begin{align}
+        \state(t) = \frac{c p \setpoint}{\beta} \left( e^{\gamma} \cos(\omega t) - 1 \right).
+    \end{align}
+
+    With this, we can derive the loss as 
+    \begin{align}
+        L &= \int_0^{\infty} \frac{1}{2}\left( \frac{c p \setpoint}{b - cp} \left(e^\gamma \cos ( \omega t ) - \frac{b}{c p}\right) \right)^2 \dt.
+    \end{align}
+    This diverges for $b \neq 0$. As $t \rightarrow \infty$, the $\exp$ term causes the error to converge to $\frac{b}{c p}$. 
+    In a full PID controller, the I term would thus grow until this constant error has been compensated. 
+    Since we ignored this term in order to get the system to be in the form of a second order ODE, 
+    we also have to choose $b=0$ if we do not want $p \rightarrow \infty$ as the optimal solution.
+
+    Then $\loss$ simplifies to
+    \begin{align}
+        \loss = \int_0^{\infty} \frac{y^2}{2}\left(e^{t\gamma} \cos (\omega t ) \right)^2 \dt = -\frac{2 \gamma^2 + \omega^2}{4 \gamma (\gamma^2 + \omega^2)} \cdot \frac{y^2}{2}.
+    \end{align}
+   As $\gamma$ is independent of $p$
+    \begin{align}
+        \pdiv{L}{p} = \pdiv{L}{\omega} \cdot \pdiv{\omega}{p},
+    \end{align}
+    where 
+    \begin{align}
+         \pdiv{L}{\omega} &= \frac{\gamma \omega}{2 (\gamma^2 + \omega^2)^2} \cdot \frac{\setpoint^2}{2} < 0\\
+         \pdiv{\omega}{p} &= \frac{2 c}{\omega} > 0.
+    \end{align}
+    As we have chosen $\omega >0$ and consider a stable control system ($\gamma < 0$), this means that, 
+    independently of the current value of $p$, we get that $\partial_p L < 0$, 
+    which means that gradient descent will always make $p$ bigger. 
+    That means that learning to minimize $L$ cannot converge for finite $p$.
+
+  \subsection{Local Loss Minimization}
+    As the calculation above showed, trying to optimized the loss function eq. \eqref{eq:l2loss} globally can easily
+    lead to an unstable system. Therefore, we now try a different approach:
+
+    We assume that the optimal weights change continuously, and over a time scale that is 
+    larger than time step of the discretized system. Then we can use the following approximation: The optimal weights 
+    $\att{w^*}{k}$ at timestep $k$ are those that minimize the loss over the time interval $[\att{t}{k}, \att{t}{k+1}]$. 
+    These weights should then be also close to optimal for the next timestep so that 
+    $\att{w}{k+1} \leftarrow \att{w^*}{k}$.
+
+    We look at a discretized version of the plant. 
+    We assume that the control input acts as a force term $g(\control)$ in addition to the force produced 
+    by the system $f(\state, \dot{\state}, t)$. This gives us 
+    \begin{align}
+        \att{\state}{k+1} \approx \att{\state}{k} + \att{\dot{\state}}{k} \Delta t + 0.5 \cdot \Delta t^2 \left( g(\att{\control}{k}) + f(\att{\state}{k}, \att{\dot{\state}}{k}, t) \right)
+    \end{align}
+    in second order Taylor expansion. The loss over the interval $[\att{t}{k}, \att{t}{k+1}]$ is approximately
+    $\att{L}{k} = 0.5 \left( {\att{\error}{k}}^2 + {\att{\error}{k+1}}^2 \right)$. 
+    We want to find the optimal weights $\att{w}{k}$ at time $\att{t}{k}$ to get optimal control $\att{\control}{k}$. 
+    Any other quantities at time $\att{t}{k}$ are considered constant.
+
+    The chain rule thus gives
+    \begin{align}
+        \pdiv{\att{L}{k}}{\att{w_i}{k}} &= \att{\error}{k+1} \cdot \pdiv{\att{\error}{k+1}}{\att{\state}{k+1}} 
+                                                             \cdot \pdiv{\att{\state}{k+1}}{\att{\control}{k}} 
+                                                             \cdot \pdiv{\att{\control}{k}}{\att{w_i}{k}} \nonumber \\
+         &= -\att{\error}{k+1} \cdot \pdiv{\att{\state}{k+1}}{\att{\control}k} 
+                               \cdot \pdiv{\att{\control}{k}}{\att{w_i}{k}} \label{eq:discrete_gradient} \\
+                        &= -\att{\error}{k+1} \cdot \frac{\Delta t^2}{2} 
+                                              \cdot \pdiv{g(\att{v}{k})}{\att{\control}{k}} 
+                                              \cdot \pdiv{\att{\control}{k}}{\att{w_i}{k}}.
+    \end{align}
+    We can rescale the loss by $0.5 \Delta t^2$, and the learning rate for gradient descent by the inverse. 
+    For the control parameter $p$ in case that $g = \mathrm{id}$ this gives then in particular
+    \begin{align}
+        \pdiv{\att{L}{k}}{\att{p}{k}} = - \att{\error}{k} \cdot \att{\error}{k+1}. \label{eq:diverging_p_local}
+    \end{align}
+    This value is negative except for cases when the sign of $\att{\error}{k}$ and $\att{\error}{k+1}$ is different, 
+    i.e. the state $\state$ crosses the setpoint $\setpoint$ in the considered interval. 
+    Especially in the limit $\Delta t \rightarrow 0$, this will never happen and gradient descent will 
+    always increase $p$. The argument does not change if we allow for generic $g$, as one of the premises when applying 
+    PID control is that $g$ not change its sign. We again get diverging behaviour.
+
+
+  \subsection{Difference Quotient}
+    The approach taken in the literature \cite{cong_novel_2005} is to use eq. \eqref{eq:discrete_gradient} but approximate 
+    \begin{align}
+        \pdiv{\att{\state}{k+1}}{\att{\control}{k}} \approx \frac{\att{\state}{k+1} - \att{\state}{k}}{\att{\control}{k} - \att{\control}{k-1}}.
+    \end{align}
+    Since this quantity easily diverges (the control remains constant, but the system continues to change due to inertia), 
+    one often takes only the sign of the expression to get the direction of change. 
+
+    The question remains whether this approximation eq. \eqref{eq:diffq_pidnn}, however badly motivated, manages to ensure
+    the stability of the system.
+
+    Going again to the limit $\Delta t \rightarrow 0$, we can write the weight update rule 
+    \begin{align}
+         \Delta w_i(t) = \error(t) \cdot \sign \left(\frac{\dot{\state}}{\dot{\control}} \right) \cdot \pdiv{\control}{w_i}.
+         \label{eq:resilient_bp}
+    \end{align}
+    If we consider a rectangular target signal $\setpoint(t) = \mathrm{rect}(t/T)$, we have $\setpoint$ as a piecewise constant function. 
+    To get an idea of the weight change that is induced by \eqref{eq:resilient_bp}, we assume that the state $\state$ oscillates with constant amplitude\footnote{For a well working controller this is a rather bad approximation. We will later lift that restriction, at the cost of not being able to solve the problem analytically.} and frequency around the setpoint, and integrate the change over a single period.
+    \begin{align}
+         \Delta w_i(t) &= \error(t) \cdot \sign \left( \frac{-\dot{\error}(t)}{p \dot{\error}(t) + d \ddot{\error}(t)} \right)  \cdot \pdiv{\control}{w_i} \label{eq:general_res_bp_wc}\\
+         &= \sin(\omega t) \cdot  \mathrm{sg} \left(\frac{-\omega \cos{\omega t}}{p \cdot \omega \cos{\omega t} + d \cdot \omega^2 \sin{\omega t} } \right) \cdot \pdiv{\control}{w_i} \nonumber \\
+         &=-\frac{ \sin(\omega t) }{\mathrm{sg}\left(p + d \omega \tan{\omega t}\right) } \cdot \pdiv{\control}{w_i}
+    \end{align}
+    We need to look at the sign in the denominator. This is negative iff
+    \begin{align}
+        \tan{\omega t} < -\frac{p}{d \omega}. \label{eq:sign_condition}
+    \end{align}
+    We get equality for $\omega t^* = \arctan \left(-\frac{p}{d \omega} \right)$. In the full interval $(-\pi/2, 3/2\pi]$ the denominator becomes negative for 
+    \begin{align}
+        \omega t \in (-\pi/2, \omega t^*) \cup (\pi/2, \pi/2+\omega t^*).
+    \end{align}
+
+    For the $p$ weight the partial derivative is $\partial_{p}\control(t) = \error(t) = \sin \omega t$. The total change during one oscillation is thus
+    \begin{align}
+        \int_{-\pi/2\omega}^{3\pi/2\omega} \hspace{-1em}\Delta p \, \dt &=  -\int_{-\pi/2}^{3\pi/2} \frac{ \sin^2(u) \td{u} }{\omega \sign \left(p + d \omega \tan{u}\right) }\\
+    \end{align}
+    By 
+    \begin{align}
+        \int_{a}^{b} \sin^2(t) \dt = \frac{1}{2} \left(b - a + \cos(a) \sin(a) - \cos(b) \sin(b) \right)
+    \end{align}
+    and $\sin^2(x + \pi) = \sin^2(x)$ we get
+    \begin{align}
+        \int_{-\pi/2\omega}^{3\pi/2\omega} \hspace{-1em}\Delta p \, \dt
+        &= 2 \left(\int_{-\pi/2}^{u^*} \hspace{-1em} \sin^2(u) - \int_{u^*}^{\pi/2} \hspace{-1em} \sin^2(u) \right) / \omega \\
+        &= \frac{1}{\omega} \left( u^* + \pihalf - \cos(u^*) \sin(u^*) - \left( \pihalf - u^* + \cos(u^*) \sin(u^*) \right)\right) \nonumber \\
+        &= \frac{2}{\omega} \left(u^* - \cos(u^*) \sin(u^*) \right) \nonumber \\
+        &= \frac{2 u^* - \sin(2 u^*)}{\omega}.
+    \end{align}
+    This is positive iff $u^*$ is positive. Setting $\kappa = \frac{p}{d \omega}$, we get $u^* < 0 \Leftrightarrow \kappa > 0$ by properties of the $\arctan$. As $p$, $d$ and $\omega$ are all positive, this always holds, so the weight change will always be negative.
+
+    If we want to impose less stringent conditions on the form of the error, we can still get results numerically. Assume
+    the error is modelled by a decaying oscillation
+    \begin{align}
+        \error(t) = A e^{-\gamma t} \cdot \cos(\omega t).
+    \end{align}
+    The prefactor $A$ can be taken out of the integral, and recaling of the time can eliminate the parameter $\omega$.
+    For that set $\tilde{t} = \omega t$, $\tilde{\gamma} = \gamma / \omega$ so that
+    \begin{align}
+        \error(t) = A e^{\tilde{\gamma} \tilde{t}} \cdot \cos(\tilde{t}).
+    \end{align}
+    The total weight change \eqref{eq:general_res_bp_wc} can be written as
+    \begin{align}
+        \Delta w_i &= -\error(t) \sign \left( p + d \frac{\ddot{\error}(t)}{\dot{\error}(t)}\right)  \cdot \pdiv{\control}{w_i} \nonumber \\
+                   &= -\error(t) \sign \left( 1 + \frac{d}{p}\cdot \frac{\ddot{\error}(t)}{\dot{\error}(t)}\right)  \cdot \pdiv{\control}{w_i}
+                   \label{eq:weight_change}
+    \end{align}
+    This can be numerically evaluated for $p$ and $d$, which yields figure~\ref{fig:weight_change}. We can see that 
+    whether the weights increase or decrease now depends on the value of $\gamma$, which makes it more difficult to 
+    determine whether the system can be stable (since changes in $p$ and $d$ influence $\gamma$ and $r$).
+    \begin{figure}[tb]
+        \centering
+        \includegraphics[width=0.75\textwidth]{code/wcc.pdf}
+        \caption{Weight change according to eq. \eqref{eq:weight_change} for $p$ (solid) and $d$ (dashed), for different 
+        values of $r = p/d$}
+        \label{fig:weight_change}
+    \end{figure}
+    We can see that for slow decay $d$ will be increased and the decay will be slowed down further. For fast decay the 
+    converse holds. Changes in $p$ only affect the amplitude of the oscillation but leave the decay unchanged.
+    Therefore, it seems very unlikely that the weigh changes depicted in figure~\ref{fig:weight_change} will lead to 
+    stable system behaviour in general.
+    
+
+  \subsection{Discussion}
+    These results beg the question of how it is even possible to successfully apply a PIDNN as in figure \ref{fig:demo:converging}
+    or \cite{cong_novel_2005,yu_applying_2006}. For that, not that $\partial_{\omega_i}\loss = \partial_\error L \cdot \partial_{\omega_i} \error$ and
+    $\partial_\error \loss = \error$, which means that the weight change goes to zero if the error goes to zero.
+
+    Thus, if the PIDNN manages to get the system into a state where it can follow the setpoint nearly perfecly, 
+    learning will stop and the system will be stable. 
+    It turns out that in this case, the adaptive algorithm in fact improves the transient response of the system. This
+    is what is tested in e.g. \cite{yu_applying_2006}.
+
+    However, if $\setpoint(t)$ is chosen in such a way that there exists no set of PID weights so that the system can 
+    follow its setpoint, the weights will be continuously updated and by the arguments in the previous section the 
+    system will loose its stability.
+
+    This shows that the local optimization of the L2 loss (which in itself is already questionable, as per 
+    section \ref{sq:L2Loss}) does not provide a way to get a stable system.
+
+    On more abstract grounds, we can argue that the L2 loss is problematic because of its symmetries. Let $\error(t)$ be
+    the error of a given system and $\loss[\error]$ be the L2 loss functional. Defining 
+    $\error^\prime(t) = \lambda \error(t/\lambda)$ givens $\loss[\error] = \loss[\error^\prime]$, but from an 
+    engineering point of view the system behaviour corresponding to $\error^\prime$ can be arbitrarily bad: The error
+    decay is sped up by a factor of lambda, but the overshoot is increased by the same factor. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  \section{Simulation Results}
+    To complement the analytical findings of the previous section we performed a series of numerical experiments. 
+    We started by looking deeper into the introductory example fig. \ref{fig:demo:diverging}. To get a more gradiual 
+    change of weights we reduced to learning rate and compensated by an increased simulation time. Figure 
+    \ref{subfig:sim:control} shows the control behaviour after 5000 time steps, shortly before the (Taylor) PIDNN becomes
+    unstable. 
+
+    The dynamics of the simulated system are very simple: 
+    \begin{align}
+        \ddot{\state} = -0.1 \state + \control. \label{eq:demo_system}
+    \end{align}
+    To make the results comparable with the analytical investigations above, the integral term has been fixed to $I=0.1$.
+    The initial values where chosen to be $P=2.5$, $D=1.5$, the learning rate was set to $0.1$.
+
+    In figure \ref{subfig:sim:weights} the corresponding weight development is plotted. It confirms the expected behaviour 
+    of monotonically increasing $p$ for Taylor, but for Resilient the results differ significantly. While figure 
+    \ref{fig:weight_change} predicts opposing signs for the changes in $p$ and $d$, \ref{subfig:sim:weights} both are 
+    decreasing for most of the time. This discrepancy might be due to the fact that we assumed gradual weight change, 
+    but $d$ changes quite rapidly at some points.
+    \begin{figure}[htb]
+    \begin{subfigure}[c]{0.5\textwidth}
+        \includegraphics[width=1.0\textwidth]{code/compare_rect.pdf}
+        \subcaption{Control with PID and both variations of PIDNN.}
+        \label{subfig:sim:control}
+    \end{subfigure}
+    \begin{subfigure}[c]{0.5\textwidth}
+        \includegraphics[width=1.0\textwidth]{code/compare_weights.pdf}
+        \subcaption{Development of Weights. Dashed: Taylor, Solid: Resilient}
+        \label{subfig:sim:weights}
+    \end{subfigure}
+    \caption{Simulation of PIDNN control of the system described by eq. \ref{eq:demo_system}.}
+    \label{fig:weights}
+    \end{figure}
+
+    To get a better overview of the behaviour of the learning algorithm, figure \ref{fig:quiver} depicts the weight 
+    change in dependence on the current weight, as well as the caused error and exemplary trajectories for the weight
+    development. The graph shows that there is no possible way for the system to reach a stable fixed point or limit 
+    cycle in the area where the error is small. Doing a similar plot for the update rule based on the Taylor expansion
+    does not reveal any new information, it just shows that $p$ and $d$ always increase.
+
+    \begin{figure}[tb]
+        \centering
+        \includegraphics[width=1.0\textwidth]{code/quiver.pdf}
+        \caption{Direction of weight change given current weights, for the system \eqref{eq:demo_system} with Resilient 
+        PIDNN control. 
+        The background color indicates the error that the given weights would generate were they used with a static PID 
+        controller, where dark/blue indicates low error. Data points which do not have an arrow indicate that the 
+        weight changes become too big, or even diverged.}
+        \label{fig:quiver}
+    \end{figure}
+
+    \section{TODO}
+    \begin{itemize}
+        \item A section about the Lyapunov stability argument found in some papers, and figure out why it is wrong.
+                \cite{cong_novel_2005}
+        \item Look at more complicated ideas to combine PIDs and NNs. \cite{andrasik_-line_2004,zribi_new_2015}
+        \item Numerical experiment in more complicated setting (maybe inverted pendulum as a classical benchmark).
+        \item Conclusion
+    \end{itemize}
+
+
+    \bibliographystyle{plain}
+    \bibliography{lit.bib} 
+\end{document}
