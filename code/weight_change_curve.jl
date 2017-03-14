@@ -58,5 +58,5 @@ for r in [0.5, 1, 2]
         push!(resultsd, change(cfg, errord))
     end
 
-    writedlm("wcc$r.txt", [lambdas resultsp resultsd])
+    writedlm("data/wcc$r.txt", [lambdas resultsp resultsd])
 end

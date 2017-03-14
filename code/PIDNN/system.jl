@@ -1,5 +1,8 @@
 abstract SystemState
 
+# TODO generalie this to arbitrary 2nd order systems so changing parameters is 
+# easier.
+
 # State of a second order system
 type State2Ord <: SystemState
     p::Float64
@@ -19,7 +22,7 @@ function observe(state::State2Ord)
     return state.p
 end
 
-########################################################################################################################
+################################################################################
 
 # State of a second order system
 type Pendulum <: SystemState
