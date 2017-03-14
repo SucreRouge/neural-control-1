@@ -1,0 +1,19 @@
+{
+    "folders":
+    [
+        {
+            "path": ".",
+            "file_exclude_patterns": [ "*.log", "*.aux", "*.blg", "*.lof", "*.lot", "*.toc", "*.fls", "*.fdb_latexmk", 
+                                       "*.gz", "*.bbl", "*.out"]
+        }
+    ],
+
+    "settings": {
+        "tab_size": 4,
+        "TEXroot": "latex/report.tex",
+        "translate_tabs_to_spaces": true, 
+        "preview_math_template_preamble":[  "\\input{/home/erik/Documents/neural-control/latex/preamble.tex}"],
+        "rulers" : [80]
+    },
+
+}
