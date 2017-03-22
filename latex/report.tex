@@ -27,7 +27,7 @@
     In this case $\control$ is a linear superposition of the current error, 
     the change rate in the error and the integral over all past errors
     \begin{align}
-        \control(T) = p \error(T) + d \dot{\error}(T) + i \int_0^T \error(t) \dt. \label{eq:control_equation}
+        \control(T) = P \error(T) + I \int_0^T \error(t) \dt + D \dot{\error}(T). \label{eq:control_equation}
     \end{align}
 
     This algorithm works reasonably well for many systems.
@@ -94,12 +94,12 @@
 
     \begin{figure}[tb]
     \begin{subfigure}[c]{0.5\textwidth}
-        \includegraphics[width=1.0\textwidth]{code/demo1.pdf}
+        \includegraphics[width=1.0\textwidth]{../figures/demo1.pdf}
         \subcaption{Constant Setpoint}
         \label{fig:demo:converging}
     \end{subfigure}
     \begin{subfigure}[c]{0.5\textwidth}
-        \includegraphics[width=1.0\textwidth]{code/demo2.pdf}
+        \includegraphics[width=1.0\textwidth]{../figures/demo2.pdf}
         \subcaption{Alternating Setpoint}
         \label{fig:demo:diverging}
     \end{subfigure}
@@ -143,15 +143,15 @@
         &\eqqcolon 2\gamma  \dot{\state} - \beta \state + c p \setpoint
     \end{align}
 
-    Let now $\omega=\sqrt{\beta-\gamma^2}$ and  $\kappa_{1,2} = \gamma \pm i \omega$, then the solution for 
+    Let now $\omega=\sqrt{\beta-\gamma^2} = \sqrt{b - cp - \gamma^2}$ and  $\kappa_{1,2} = \gamma \pm i \omega$, then the solution for 
     $\state(0) = 0$ and $\dot{\state}(0) = 0$ becomes
     \begin{align}
-        \state(t) = \frac{c p \setpoint}{\beta} \left( e^{\gamma} \cos(\omega t) - 1 \right).
+        \state(t) = \frac{c p \setpoint}{\beta} \left( e^{\gamma t} \cos(\omega t) - 1 \right).
     \end{align}
 
     With this, we can derive the loss as 
     \begin{align}
-        L &= \int_0^{\infty} \frac{1}{2}\left( \frac{c p \setpoint}{b - cp} \left(e^\gamma \cos ( \omega t ) - \frac{b}{c p}\right) \right)^2 \dt.
+        L &= \int_0^{\infty} \frac{1}{2}\left( \frac{c p \setpoint}{b - cp} \left(e^{\gamma t} \cos ( \omega t ) - \frac{b}{c p}\right) \right)^2 \dt.
     \end{align}
     This diverges for $b \neq 0$. As $t \rightarrow \infty$, the $\exp$ term causes the error to converge to $\frac{b}{c p}$. 
     In a full PID controller, the I term would thus grow until this constant error has been compensated. 
@@ -164,12 +164,12 @@
     \end{align}
    As $\gamma$ is independent of $p$
     \begin{align}
-        \pdiv{L}{p} = \pdiv{L}{\omega} \cdot \pdiv{\omega}{p},
+        \pdiv{L}{p} = \pdiv{L}{\omega} \cdot \pdiv{\omega}{p} = \frac{\gamma \cdot \setpoint^2}{2 (\gamma^2 + \omega^2)^2},
     \end{align}
-    where 
+    as 
     \begin{align}
-         \pdiv{L}{\omega} &= \frac{\gamma \omega}{2 (\gamma^2 + \omega^2)^2} \cdot \frac{\setpoint^2}{2} < 0\\
-         \pdiv{\omega}{p} &= \frac{2 c}{\omega} > 0.
+         \pdiv{L}{\omega} = \frac{\gamma \omega}{2 (\gamma^2 + \omega^2)^2} \cdot \frac{\setpoint^2}{2}, \qquad
+         \pdiv{\omega}{p} = \frac{2 c}{\omega}.
     \end{align}
     As we have chosen $\omega >0$ and consider a stable control system ($\gamma < 0$), this means that, 
     independently of the current value of $p$, we get that $\partial_p L < 0$, 
@@ -291,7 +291,7 @@
     determine whether the system can be stable (since changes in $p$ and $d$ influence $\gamma$ and $r$).
     \begin{figure}[tb]
         \centering
-        \includegraphics[width=0.75\textwidth]{code/wcc.pdf}
+        \includegraphics[width=0.75\textwidth]{../figures/wcc.pdf}
         \caption{Weight change according to eq. \eqref{eq:weight_change} for $p$ (solid) and $d$ (dashed), for different 
         values of $r = p/d$}
         \label{fig:weight_change}
@@ -321,12 +321,17 @@
 
     On more abstract grounds, we can argue that the L2 loss is problematic because of its symmetries. Let $\error(t)$ be
     the error of a given system and $\loss[\error]$ be the L2 loss functional. Defining 
-    $\error^\prime(t) = \lambda \error(t/\lambda)$ givens $\loss[\error] = \loss[\error^\prime]$, but from an 
+    $\error^\prime(t) = \sqrt{\lambda} \error(t/\lambda)$ givens $\loss[\error] = \loss[\error^\prime]$, but from an 
     engineering point of view the system behaviour corresponding to $\error^\prime$ can be arbitrarily bad: The error
-    decay is sped up by a factor of lambda, but the overshoot is increased by the same factor. 
+    decay is sped up by a factor of lambda, but the overshoot is also increased, albeit only by the square root. 
 
-
-
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %                       Lyapunov Argument
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    In \cite{cong_novel_2005} an argument for the stability of PIDNN control is
+    developed based on using $\att{J}{k}$ as a Lyapunov function and deriving 
+    bounds for the learning rate which guarantee that 
+    $\att{J}{k+1} < \att{J}{k}$.
 
 
 
@@ -360,16 +365,21 @@
     but $d$ changes quite rapidly at some points.
     \begin{figure}[htb]
     \begin{subfigure}[c]{0.5\textwidth}
-        \includegraphics[width=1.0\textwidth]{code/compare_rect.pdf}
+        \includegraphics[width=1.0\textwidth]{../figures/compare_rect.pdf}
         \subcaption{Control with PID and both variations of PIDNN.}
         \label{subfig:sim:control}
     \end{subfigure}
     \begin{subfigure}[c]{0.5\textwidth}
-        \includegraphics[width=1.0\textwidth]{code/compare_weights.pdf}
+        \includegraphics[width=1.0\textwidth]{../figures/compare_weights.pdf}
         \subcaption{Development of Weights. Dashed: Taylor, Solid: Resilient}
         \label{subfig:sim:weights}
     \end{subfigure}
-    \caption{Simulation of PIDNN control of the system described by eq. \ref{eq:demo_system}.}
+    \caption{Simulation of PIDNN control of the system described by eq. \eqref{eq:demo_system}, trying to follow
+             a rectangular setpoint signal. For the
+             system development only a short time window is shown, as indicated by the dotted lines.
+             In this time frame the Taylor algorithm starts to diverge whereas Resilient still
+             remains stable. However, at the end of the investigated time Resilient produces
+             negative weights and it also diverges. For this simulation the $I$ weight has been held constant.}
     \label{fig:weights}
     \end{figure}
 
@@ -381,12 +391,12 @@
 
     \begin{figure}[tb]
         \centering
-        \includegraphics[width=1.0\textwidth]{code/quiver.pdf}
+        \includegraphics[width=1.0\textwidth]{../figures/quiver.pdf}
         \caption{Direction of weight change given current weights, for the system \eqref{eq:demo_system} with Resilient 
-        PIDNN control. 
+        PIDNN control and fixed $I$ weight. 
         The background color indicates the error that the given weights would generate were they used with a static PID 
-        controller, where dark/blue indicates low error. Data points which do not have an arrow indicate that the 
-        weight changes become too big, or even diverged.}
+        controller, where green indicates low error. Data points which do not have an arrow indicate that the 
+        weight changes become too large or even diverged.}
         \label{fig:quiver}
     \end{figure}
 
