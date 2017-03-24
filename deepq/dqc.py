@@ -131,6 +131,12 @@ def test_callback():
         fig.savefig("test_%d.pdf"%test_counter)
         plt.close(fig)
 
+        rwd_h = np.array(reward_hist)
+        exp_h = np.array(expected_hist)
+        q_h = np.array(q_hist)
+        c     = np.stack([rwd_h, exp_h, q_h]).transpose()
+        np.savetxt("testing.txt", c)
+
 
     return call
 
