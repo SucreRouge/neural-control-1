@@ -2,8 +2,10 @@ import numpy as np
 import tensorflow as tf
 
 class QNetGraph(object):
-    def __init__(self, update):
+    def __init__(self, update, global_step, summaries=None):
         self._update_target = update
+        self._summaries     = summaries
+        self._global_step   = global_step
 
     def set_policy_ops(self, input, output):
         self._policy_in  = input
@@ -31,9 +33,13 @@ class QNetGraph(object):
                 self._train_terminal: qs.terminal}
         return feed
 
-    def train_step(self, qs, session):
+    def train_step(self, qs, session, summary_writer=None):
         feed = self._train_feed(qs)
-        _, loss = session.run([self._train_step, self._train_loss], feed_dict = feed)
+        if summary_writer is None:
+            _, loss = session.run([self._train_step, self._train_loss], feed_dict = feed)
+        else:
+            _, loss, smr, step = session.run([self._train_step, self._train_loss, self._summaries, self._global_step], feed_dict = feed)
+            summary_writer.add_summary(smr, step)
         return loss
 
     def update_target(self, session):
@@ -59,33 +65,43 @@ class QNet(object):
         # the target net
         with tf.variable_scope("target_network"):
             target_input, target_actions = build_q_net(self._state_size, self._history_length, self._num_actions, arch)
+            tf.summary.histogram("target_action_scores", target_actions)
 
         with tf.variable_scope("value_network"):
             value_input, value_actions   = build_q_net(self._state_size, self._history_length, self._num_actions, arch)
+            tf.summary.histogram("action_scores", value_actions)
 
         with tf.variable_scope("training"):
             reward   = tf.placeholder(tf.float32, [None], name="reward")
-            chosen   = tf.placeholder(tf.int32, [None], name="chosen")
-            terminal = tf.placeholder(tf.bool, [None], name="chosen")
-            discount = tf.Variable(0.99, dtype=tf.float32, trainable=False)
+            chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
+            terminal = tf.placeholder(tf.bool,    [None], name="terminal")
+            discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
+            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
 
             # TODO debug to check that this does what i think it does
             # target vaues
             with tf.name_scope("target_Q"):
-                best_future_q = tf.reduce_max(target_actions, axis=1)
+                best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")
                 state_value   = best_future_q * discount * tf.to_float(terminal) + reward
 
             # current values
             with tf.name_scope("current_Q"):
                 current_q     = choose_from_array(value_actions, chosen)
+                tf.summary.scalar("mean_Q", tf.reduce_mean(current_q))
 
             loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value))
-            train = optimizer.minimize(loss)
+            tf.summary.scalar("loss", loss)
+            # gradient clipping
+            grad_vars = optimizer.compute_gradients(loss)
+            capped = [(tf.clip_by_norm(gv[0], 1.0), gv[1]) for gv in grad_vars if gv[0] is not None]
+            train = optimizer.apply_gradients(capped, global_step=gstep)
+
+            #train = optimizer.minimize(loss, global_step=gstep)
 
         with tf.variable_scope("update_target_network"):
             update_target = assign_from_scope("value_network", "target_network")
 
-        qng = QNetGraph(update = update_target)
+        qng = QNetGraph(update = update_target, global_step=gstep, summaries=tf.summary.merge_all())
         qng.set_policy_ops(input = value_input, output = value_actions)
         qng.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
                             terminal = terminal, loss = loss, train = train)
