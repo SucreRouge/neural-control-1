@@ -17,17 +17,25 @@ class System(object):
         self.v += -0.5*self.x * dt + control * dt
         self.x += self.v * dt
 
-    def reset(self):
-        self.x = 0
+    def reset(self, test=False):
+        self.x = np.random.rand()
         self.v = 0
 
 
 class EGreedy(object):
-    def __init__(self, eps):
-        self.epsilon = eps
+    def __init__(self, start_eps, end_eps, num_steps):
+        self._start_epsilon = start_eps
+        self._end_epsilon   = end_eps
+        self._num_steps     = num_steps
+        self.epsilon = start_eps
 
-    def __call__(self, actions):
-        if np.random.rand() < self.epsilon:
+    def set_stepcount(self, steps):
+        decay = min(1, float(steps) / self._num_steps)
+        dist  = self._start_epsilon - self._end_epsilon
+        self.epsilon = self._start_epsilon - decay * dist
+
+    def __call__(self, actions, test=False):
+        if not test and np.random.rand() < self.epsilon:
             a = np.random.randint(len(actions[0]))
             return a
         else:
@@ -35,21 +43,27 @@ class EGreedy(object):
 
 
 class QLearner(object):
-    def __init__(self, history_length, memory_size, state_size, num_actions, session):
+    def __init__(self, history_length, memory_size, state_size, num_actions, session,
+                    steps_per_epoch=10000, final_exploration_frame=1000000):
+        # configuration variables (these remain constant)
         self._num_actions    = num_actions
         self._state_size     = state_size
         self._history_length = history_length
+        self._steps_per_epoch = steps_per_epoch
+        self._next_epoch     = None
+        self._policy         = EGreedy(1.0, 0.1, final_exploration_frame)
+        
         self._history        = History(duration=history_length, state_size=state_size)
         self._state_memory   = Memory(size=memory_size, history_length=history_length, state_size=state_size)
         self._session        = session
-        self._policy         = EGreedy(1.0)
+        self._last_action    = None
+
+        # counters
+        self._action_counter = 0
         self._step_counter   = 0
         self._epoch_counter  = 0
-        self._steps_per_epoch = 10000
-        self._last_action    = None
-        self._next_epoch     = None
 
-    def observe(self, state, reward):
+    def observe(self, state, reward, test=False):
         # if this is the first state, there is no transition to remember,
         # so simply add to the state history
         if self._last_action is None:
@@ -65,21 +79,28 @@ class QLearner(object):
             next_state = None
             self._last_action = None
             self._history.clear()
-        self._state_memory.append(state=last_state, next=next_state, reward=reward, action=action)
+        
+        # if not in test mode, remember the transition
+        if not test:
+            self._state_memory.append(state=last_state, next=next_state, reward=reward, action=action)
 
-    def get_action(self):
-        full_state = self._history.state
+    def get_action(self, test=False):
+        full_state    = self._history.state
         action_vals   = self._qnet.get_actions(full_state, self._session)
-        action        = self._policy(action_vals)
+        action        = self._policy(action_vals, test)
         self._last_action = action
+        if not test:
+            self._action_counter += 1
+            self._policy.set_stepcount(self._action_counter)
         
         return action, action_vals
 
-    def train(self):
-        if len(self._state_memory) < 1000:
+    def train(self, summary_writer=None):
+        if len(self._state_memory) < 10000:
             return
 
-        ls = self._qnet.train_step(self._state_memory.sample(32), self._session)
+        sample = self._state_memory.sample(32)
+        ls = self._qnet.train_step(sample, self._session, summary_writer)
         self._step_counter += 1
         if self._step_counter > self._steps_per_epoch:
             # copy target net to policy net
@@ -95,7 +116,7 @@ class QLearner(object):
                     num_actions    = self._num_actions)
 
         # TODO Figure these out!
-        opt = tf.train.AdamOptimizer()
+        opt = tf.train.RMSPropOptimizer(learning_rate=2.5e-4, decay=0.99, epsilon=0.01, momentum=0.95)
         self._qnet = qnet.build_graph(arch, opt)
 
     def init(self):
@@ -161,56 +182,86 @@ def arch(inp):
 
     s = [d.value for d in c2.get_shape()]
     flat = tf.reshape(c2, [-1, s[1]*s[2]])
-    fc1 = tf.layers.dense(flat, 50, activation=tf.nn.relu, name="fc1")
-    fc2 = tf.layers.dense(fc1,  30, activation=tf.nn.relu, name="fc2")
+    fc1 = tf.layers.dense(flat, 100, activation=tf.nn.relu, name="fc1")
+    fc2 = tf.layers.dense(fc1,  50, activation=tf.nn.relu, name="fc2")
     return fc2
 
-ql = QLearner(history_length=10, memory_size=50000, 
+ql = QLearner(history_length=10, memory_size=1000000, 
               state_size=task.state_size, num_actions=task.num_actions, 
               session=tf.Session())
 
+next_ep = False
+
 def observer():
-    epoch_rewards = deque()
     reward_history = deque()
     q_history = deque()
-    epoch_q = deque()
     def update_epoch():
-        reward_history.append(np.mean(epoch_rewards))
-        q_history.append(np.mean(epoch_q))
-        epoch_rewards.clear()
-        epoch_q.clear()
-    return reward_history, update_epoch, epoch_rewards, q_history, epoch_q
+        episode_rewards = deque()
+        episode_q = deque()
+        ct = deque()
+        # start a new task here
+        task.reset()
+        task._system.x = 0 # make the task deterministic
+        total_reward = 0
+        while True:
+            action, values = ql.get_action(test=True)
+            reward, terminal = task.update(action)
+            total_reward += reward
+            episode_rewards.append(reward)
+            episode_q.append(total_reward + np.amax(values))
+            ql.observe(None if terminal else task.state, reward, test=True)
+            if terminal:
+                task.reset()
+                break
+            ct.append(np.array([task._system.x, task._control]))
+        reward_history.append(np.sum(episode_rewards))
+        q_history.append(np.mean(episode_q))
+        fig, ax = plt.subplots(1,1)
+        ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(ql._epoch_counter, ql._policy.epsilon*100, np.sum(episode_rewards)))
+        ax.set_autoscaley_on(False)
+        ax.set_ylim([-1,2])
+        ax.plot(np.array(ct)[:, 0], linewidth=2)
+        ax.plot(np.array(ct)[:, 1])
+        ax.plot([1]*len(ct))
+        fig.savefig("test_%d.pdf"%ql._epoch_counter)
+        plt.close(fig)
+        global next_ep
+        next_ep = True
+
+    return reward_history, update_epoch, q_history
 
 ql.setup_graph(arch)
 ql.init()
+sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 ct = deque()
 fig, ax = plt.subplots(2,1)
 # observe the initial state
 ql.observe(task.state, 0)
+ax[0].set_autoscaley_on(False)
+ax[0].set_ylim([-1,2])
 
-reward_history, ue, epoch_rewards, q_history, epoch_q = observer()
+reward_history, ue, q_history = observer()
 ql._next_epoch = ue
 
 for i in range(10000000):
     action, values = ql.get_action()
     reward, terminal = task.update(action)
-    epoch_rewards.append(reward)
-    epoch_q.append(np.amax(values))
     ql.observe(None if terminal else task.state, reward)
     if terminal:
         task.reset()
 
-    ql.train()
+    if i % 4 == 0:
+        ql.train(sw if i % 100 == 0 else None)
     if task._stepcount == 0:
+        plt.pause(0.0001)
         ax[0].clear()
-        ax[0].set_title("Epoch: %d , Epsilon=%f"%(ql._epoch_counter, ql._policy.epsilon))
+        ax[0].set_title("Epoch: %d , Epsilon=%.1f%%"%(ql._epoch_counter, ql._policy.epsilon*100))
         ax[0].plot(np.array(ct)[:, 0], linewidth=2)
         ax[0].plot(np.array(ct)[:, 1])
         ax[0].plot([1]*len(ct))
-        plt.pause(0.0001)
-
-        print(reward_history)
-        if len(reward_history) > 1:
+        
+        if len(reward_history) > 1 and next_ep:
+            print("new_ax1")
             ax[1].clear()
             h = np.array(reward_history)
             hist = min(len(h), 25)
@@ -220,6 +271,7 @@ for i in range(10000000):
             ax[1].plot(h)
             ax[1].plot(q_history)
             ax[1].plot(x, line)
+            next_ep = False
         
         ct.clear()
     ct.append(np.array([task._system.x, task._control]))

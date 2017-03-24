@@ -64,11 +64,13 @@ class QNet(object):
     def _build_graph(self, arch, optimizer):
         # the target net
         with tf.variable_scope("target_network"):
-            target_input, target_actions = build_q_net(self._state_size, self._history_length, self._num_actions, arch)
+            target_input = self._make_input()
+            target_actions = build_q_net(target_input, self._num_actions, arch)
             tf.summary.histogram("target_action_scores", target_actions)
 
-        with tf.variable_scope("value_network"):
-            value_input, value_actions   = build_q_net(self._state_size, self._history_length, self._num_actions, arch)
+        with tf.variable_scope("value_network") as value_net_scope:
+            value_input = self._make_input()
+            value_actions   = build_q_net(value_input, self._num_actions, arch)
             tf.summary.histogram("action_scores", value_actions)
 
         with tf.variable_scope("training"):
@@ -93,7 +95,7 @@ class QNet(object):
             tf.summary.scalar("loss", loss)
             # gradient clipping
             grad_vars = optimizer.compute_gradients(loss)
-            capped = [(tf.clip_by_norm(gv[0], 1.0), gv[1]) for gv in grad_vars if gv[0] is not None]
+            capped = [(tf.clip_by_norm(gv[0], 0.5), gv[1]) for gv in grad_vars if gv[0] is not None]
             train = optimizer.apply_gradients(capped, global_step=gstep)
 
             #train = optimizer.minimize(loss, global_step=gstep)
@@ -106,6 +108,9 @@ class QNet(object):
         qng.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
                             terminal = terminal, loss = loss, train = train)
         return qng
+
+    def _make_input(self, name="state"):
+        return tf.placeholder(tf.float32, [None, self._history_length, self._state_size], name=name)
 
 # tf helper functions
 def assign_from_scope(source_scope, target_scope):
@@ -127,9 +132,10 @@ def choose_from_array(source, indices):
     values      = tf.gather_nd(source, indices)
     return values
 
-def build_q_net(state_size, history_length, num_actions, arch):
-    inp = tf.placeholder(tf.float32, [None, history_length, state_size], name="state")
-    features = arch(inp)
+def build_q_net(input, num_actions, arch):
+    history_length = input.get_shape()[1].value
+    state_size     = input.get_shape()[2].value
+    features = arch(input)
     actions  = tf.layers.dense(features, num_actions, name="qvalues")
 
-    return inp, tf.reshape(actions, [-1, num_actions])
+    return tf.reshape(actions, [-1, num_actions])
