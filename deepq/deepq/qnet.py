@@ -46,7 +46,7 @@ class QNetGraph(object):
         session.run(self._update_target)
 
 class QNet(object):
-    def __init__(self, state_size, history_length, num_actions, graph = None):
+    def __init__(self, state_size, history_length, num_actions, graph = None, double_q=False):
         if graph is None:
             graph = tf.get_default_graph()
 
@@ -54,6 +54,7 @@ class QNet(object):
         self._history_length = history_length
         self._num_actions    = num_actions
         self._graph          = graph
+        self._double_q       = double_q
 
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
@@ -83,7 +84,13 @@ class QNet(object):
             # TODO debug to check that this does what i think it does
             # target vaues
             with tf.name_scope("target_Q"):
-                best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")
+                if self._double_q:
+                    with tf.variable_scope(value_net_scope, reuse=True):
+                        proposed_actions = build_q_net(target_input, self._num_actions, arch)
+                    best_action = tf.argmax(proposed_actions, axis=1)
+                    best_future_q = choose_from_array(target_actions, best_action)
+                else:
+                    best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")
                 state_value   = best_future_q * discount * tf.to_float(terminal) + reward
 
             # current values
@@ -91,7 +98,7 @@ class QNet(object):
                 current_q     = choose_from_array(value_actions, chosen)
                 tf.summary.scalar("mean_Q", tf.reduce_mean(current_q))
 
-            loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value))
+            loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
             tf.summary.scalar("loss", loss)
             # gradient clipping
             grad_vars = optimizer.compute_gradients(loss)
@@ -127,9 +134,10 @@ def assign_from_scope(source_scope, target_scope):
 
 def choose_from_array(source, indices):
     """ returns [source[i, indices[i]] for i in 1:len(indices)] """
-    num_samples = tf.shape(indices)[0]
-    indices     = tf.transpose(tf.stack([tf.range(0, num_samples), indices]))
-    values      = tf.gather_nd(source, indices)
+    with tf.name_scope("choose_from_array"):
+        num_samples = tf.shape(indices)[0]
+        indices     = tf.transpose(tf.stack([tf.cast(tf.range(0, num_samples), indices.dtype), indices]))
+        values      = tf.gather_nd(source, indices)
     return values
 
 def build_q_net(input, num_actions, arch):

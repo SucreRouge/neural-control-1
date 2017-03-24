@@ -110,13 +110,14 @@ class QLearner(object):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, arch):
+    def setup_graph(self, arch, double_q=False):
         qnet = QNet(state_size     = self._state_size, 
                     history_length = self._history_length, 
-                    num_actions    = self._num_actions)
+                    num_actions    = self._num_actions,
+                    double_q       = double_q)
 
         # TODO Figure these out!
-        opt = tf.train.RMSPropOptimizer(learning_rate=2.5e-4, decay=0.99, epsilon=0.01, momentum=0.95)
+        opt = tf.train.RMSPropOptimizer(learning_rate=1.0e-4, decay=0.99, epsilon=0.01, momentum=0.95)
         self._qnet = qnet.build_graph(arch, opt)
 
     def init(self):
@@ -177,7 +178,7 @@ from scipy import stats
 task = ControlTask(System(), 32)
 
 def arch(inp):
-    c1 = tf.layers.conv1d(inp, 32, 3, padding='same', activation=tf.nn.relu, name="conv1")
+    c1 = tf.layers.conv1d(inp, 64, 3, padding='same', activation=tf.nn.relu, name="conv1")
     c2 = tf.layers.conv1d(c1,  32, 3, padding='same', activation=tf.nn.relu, name="conv2")
 
     s = [d.value for d in c2.get_shape()]
@@ -186,7 +187,7 @@ def arch(inp):
     fc2 = tf.layers.dense(fc1,  50, activation=tf.nn.relu, name="fc2")
     return fc2
 
-ql = QLearner(history_length=10, memory_size=1000000, 
+ql = QLearner(history_length=10, memory_size=10000000, 
               state_size=task.state_size, num_actions=task.num_actions, 
               session=tf.Session())
 
@@ -230,15 +231,13 @@ def observer():
 
     return reward_history, update_epoch, q_history
 
-ql.setup_graph(arch)
+ql.setup_graph(arch, double_q = True)
 ql.init()
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 ct = deque()
 fig, ax = plt.subplots(2,1)
 # observe the initial state
 ql.observe(task.state, 0)
-ax[0].set_autoscaley_on(False)
-ax[0].set_ylim([-1,2])
 
 reward_history, ue, q_history = observer()
 ql._next_epoch = ue
@@ -255,16 +254,18 @@ for i in range(10000000):
     if task._stepcount == 0:
         plt.pause(0.0001)
         ax[0].clear()
+        ax[0].set_autoscaley_on(False)
+        ax[0].set_ylim([-1,2])
         ax[0].set_title("Epoch: %d , Epsilon=%.1f%%"%(ql._epoch_counter, ql._policy.epsilon*100))
         ax[0].plot(np.array(ct)[:, 0], linewidth=2)
         ax[0].plot(np.array(ct)[:, 1])
         ax[0].plot([1]*len(ct))
-        
+                
         if len(reward_history) > 1 and next_ep:
             print("new_ax1")
             ax[1].clear()
             h = np.array(reward_history)
-            hist = min(len(h), 25)
+            hist = min(len(h), 20)
             x = np.arange(len(h)-hist, len(h))
             slope, intercept, _, _, _ = stats.linregress(x, h[-hist:])
             line = slope*x+intercept
@@ -272,6 +273,11 @@ for i in range(10000000):
             ax[1].plot(q_history)
             ax[1].plot(x, line)
             next_ep = False
+
+        ax[0].set_autoscaley_on(False)
+        ax[0].set_ylim([-1,2])
+        ax[1].set_autoscaley_on(False)
+        ax[1].set_ylim([-200,0])
         
         ct.clear()
     ct.append(np.array([task._system.x, task._control]))
