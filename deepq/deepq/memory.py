@@ -78,7 +78,7 @@ class Memory(object):
         self._total += 1
 
     def sample(self, amount):
-        s  = np.random.choice(range(len(self)), size=amount, replace=False)
+        s  = np.random.randint(len(self), size=amount)
         return QSample(self._states[s], self._actions[s], self._rewards[s], self._next[s], self._term[s])
 
     def __len__(self):
