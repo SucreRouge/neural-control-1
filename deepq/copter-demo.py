@@ -25,7 +25,7 @@ def arch(inp):
 
     s = [d.value for d in c2.get_shape()]
     flat = tf.reshape(c2, [-1, s[1]*s[2]])
-    fc = tf.layers.dense(flat, 128, activation=tf.nn.relu, name="fc")
+    fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
     return fc
 
 def episode_callback():
