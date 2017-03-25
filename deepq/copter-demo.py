@@ -85,12 +85,12 @@ def test_callback():
 
 task = CopterEnv()
 
-controller = DeepQController(history_length=10, memory_size=1000000, 
+controller = DeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], num_actions=task.action_space.n,
-              final_exploration_frame=1e5, minibatch_size=32)
+              final_exploration_frame=2e5, minibatch_size=32)
 controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 
-run(task=task, controller=controller, num_frames=1e6, test_every=1e4, 
+run(task=task, controller=controller, num_frames=1e6, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())

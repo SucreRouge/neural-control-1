@@ -46,10 +46,10 @@ class CopterEnv(gym.Env):
 
         # map discrete actions to control values
         actions = deque()
-        for u0 in [0, 0.01, 0.02, 0.05]:
-            for u1 in [0, 0.01, 0.02, 0.05]:
-                for u2 in [0, 0.01, 0.02, 0.05]:
-                    for u3 in [0, 0.01, 0.02, 0.05]:
+        for u0 in [-0.05, 0.0, 0.05]:
+            for u1 in [-0.05, 0.0, 0.05]:
+                for u2 in [-0.05, 0.0, 0.05]:
+                    for u3 in [-0.05, 0.0, 0.05]:
                         actions.append(np.array([u0, u1, u2, u3]))
 
         self.action_space = spaces.Discrete(len(actions))
