@@ -47,7 +47,7 @@ class QNetGraph(object):
 
 class QNet(object):
     def __init__(self, state_size, history_length, num_actions, graph = None, 
-                 target_net = True, double_q=False):
+                 target_net = True, double_q=False, dueling=False):
         if graph is None:
             graph = tf.get_default_graph()
 
@@ -57,6 +57,7 @@ class QNet(object):
         self._graph          = graph
         self._double_q       = double_q
         self._use_target_net = target_net
+        self._dueling_arch   = dueling
 
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
@@ -69,17 +70,17 @@ class QNet(object):
         if self._use_target_net:
             with tf.variable_scope("target_network"):
                 target_input = self._make_input()
-                target_actions = build_q_net(target_input, self._num_actions, arch)
+                target_actions = self._build_q_net(target_input, self._num_actions, arch)
                 tf.summary.histogram("target_action_scores", target_actions)
         else:
             with tf.variable_scope("value_network"):
                 target_input   = self._make_input()
-                target_actions = build_q_net(target_input, self._num_actions, arch)
+                target_actions = self._build_q_net(target_input, self._num_actions, arch)
                 tf.summary.histogram("target_action_scores", target_actions)
 
         with tf.variable_scope("value_network", reuse=not self._use_target_net) as value_net_scope:
             value_input = self._make_input()
-            value_actions   = build_q_net(value_input, self._num_actions, arch)
+            value_actions   = self._build_q_net(value_input, self._num_actions, arch)
             tf.summary.histogram("action_scores", value_actions)
 
         with tf.variable_scope("training"):
@@ -94,7 +95,7 @@ class QNet(object):
             with tf.name_scope("target_Q"):
                 if self._double_q:
                     with tf.variable_scope(value_net_scope, reuse=True):
-                        proposed_actions = build_q_net(target_input, self._num_actions, arch)
+                        proposed_actions = self._build_q_net(target_input, self._num_actions, arch)
                     best_action = tf.argmax(proposed_actions, axis=1)
                     best_future_q = choose_from_array(target_actions, best_action)
                 else:
@@ -120,6 +121,7 @@ class QNet(object):
                 update_target = assign_from_scope("value_network", "target_network")
         else:
             update_target = tf.no_op()
+        
         qng = QNetGraph(update = update_target, global_step=gstep, summaries=tf.summary.merge_all())
         qng.set_policy_ops(input = value_input, output = value_actions)
         qng.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
@@ -128,6 +130,24 @@ class QNet(object):
 
     def _make_input(self, name="state"):
         return tf.placeholder(tf.float32, [None, self._history_length, self._state_size], name=name)
+
+
+    def _build_q_net(self, input, num_actions, arch):
+        history_length = input.get_shape()[1].value
+        state_size     = input.get_shape()[2].value
+        features = arch(input)
+        if self._dueling_arch:
+            return self._make_dueling_arch(features, num_actions)
+        else:
+            actions  = tf.layers.dense(features, num_actions, name="qvalues")
+            return actions
+
+    def _make_dueling_arch(self, features, num_actions):
+        action_vals = tf.layers.dense(features, num_actions, name="action_values")
+        state_vals  = tf.layers.dense(features, 1, name="state_values")
+        with tf.name_scope("q_values"):
+            q_vals = state_vals + action_vals - tf.reduce_mean(action_vals, axis=1, keep_dims=True)
+        return q_vals  
 
 # tf helper functions
 def assign_from_scope(source_scope, target_scope):
@@ -150,10 +170,3 @@ def choose_from_array(source, indices):
         values      = tf.gather_nd(source, indices)
     return values
 
-def build_q_net(input, num_actions, arch):
-    history_length = input.get_shape()[1].value
-    state_size     = input.get_shape()[2].value
-    features = arch(input)
-    actions  = tf.layers.dense(features, num_actions, name="qvalues")
-
-    return tf.reshape(actions, [-1, num_actions])

@@ -95,12 +95,13 @@ class DeepQController(object):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, arch, target_net=True, double_q=False, learning_rate=1e-4):
+    def setup_graph(self, arch, target_net=True, double_q=False, dueling=False, learning_rate=1e-4):
         qnet = QNet(state_size     = self._state_size, 
                     history_length = self._history_length, 
                     num_actions    = self._num_actions,
                     double_q       = double_q,
-                    target_net     = target_net)
+                    target_net     = target_net,
+                    dueling        = dueling)
 
         # TODO Figure these out!
         opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)

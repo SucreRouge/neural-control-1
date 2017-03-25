@@ -66,9 +66,7 @@ def test_callback():
         fig, ax = plt.subplots(1,1)
         ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
         ax.set_autoscaley_on(False)
-        ax.set_ylim([-1.1, 2])
-        ax.plot(track[:, 1], linewidth=2)  # action
-#        ax.plot(track[:, 2])               # reward
+        ax.set_ylim([-2, 2])
         ax.plot(track[:, 3])               # x
         ax.plot(track[:, 4])               # y
         ax.plot(track[:, 5])               # c
@@ -87,9 +85,9 @@ def test_callback():
 controller = DeepQController(history_length=10, memory_size=1000000, 
               state_size=task.observation_space.shape[0], num_actions=task.action_space.n,
               final_exploration_frame=1e5, minibatch_size=32)
-controller.setup_graph(arch, double_q=True, target_net=True, learning_rate=2.5e-4)
+controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 
-run(task=task, controller=controller, num_frames=50e6, test_every=1e5, 
+run(task=task, controller=controller, num_frames=1e6, test_every=1e4, 
     episode_callback=episode_callback(), test_callback = test_callback())
