@@ -52,13 +52,13 @@ class ControlEnv(gym.Env):
         err = abs(self._x - self._y)
 
         done = bool(self._steps > 300)
-        err -= dc/10
+        reward = -dc/10
 
         if err < self.threshold:
             rerr = err / self.threshold
-            reward = 1.0 - rerr
+            reward += 1.0 - rerr
         else:
-            reward = -1
+            reward -= 1
 
         # random walk in target state
         if self.np_random.rand() < 0.05:
