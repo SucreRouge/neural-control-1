@@ -86,5 +86,5 @@ controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learn
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 
-run(task=task, controller=controller, num_frames=50e6, test_every=1e5, 
+run(task=task, controller=controller, num_frames=1e6, test_every=1e4, 
     episode_callback=episode_callback(), test_callback = test_callback())

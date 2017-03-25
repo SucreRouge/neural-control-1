@@ -24,6 +24,7 @@ class ControlEnv(gym.Env):
         self.observation_space = spaces.Box(-high, high)
 
         self.threshold = 0.1
+        self._alpha = 0.5
 
         self._seed()
         self.viewer = None
@@ -42,14 +43,16 @@ class ControlEnv(gym.Env):
         dt      = 0.1
 
         # integrate state
-        self._v += -0.5*self._x * dt + control * dt
+        self._v += -self._alpha*self._x * dt + control * dt
         self._x += self._v * dt
+        dc = abs(self._c - control)
         self._c = control
         self._steps += 1
 
         err = abs(self._x - self._y)
 
         done = bool(self._steps > 300)
+        err -= dc/10
 
         if err < self.threshold:
             rerr = err / self.threshold
@@ -69,6 +72,8 @@ class ControlEnv(gym.Env):
         self._c = 0.0
         self._y = 2*(self.np_random.rand() - 0.5)
         self._steps = 0
+        # randomize the dynamics a bit
+        self._alpha = 0.5 + 0.4*(self.np_random.rand() - 0.5)
 
         self.steps_beyond_done = None
         return self._get_state()
