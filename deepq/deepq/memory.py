@@ -49,13 +49,16 @@ QSample = namedtuple('QSample', ['current', 'action', "reward", "next", "termina
 class Memory(object):
     """ This class is responsible for managing the replay memory
     """
-    def __init__(self, size, history_length, state_size):
+    def __init__(self, size, history_length, state_size, action_dim = 1):
         """ size: int Number of states transitions to remember
-            state_size: int Size of a single state
+            history_length: int Number of frames that are save in history.
+            state_size: int Size of a single state. 
+            action_dim: int Number of independent actions.
+            A complete state history thus has the shape (history_length, state_size)
         """
         self._size    = size
         self._states  = np.zeros((size, history_length, state_size))
-        self._actions = np.zeros(size, dtype=np.int32)
+        self._actions = np.zeros((size, 1), dtype=np.int32)
         self._rewards = np.zeros(size)
         self._next    = np.zeros((size, history_length, state_size))
         self._term    = np.zeros(size, dtype=bool)
@@ -65,7 +68,7 @@ class Memory(object):
     def append(self, state, action, reward, next):
         i = self._write_pointer
         self._states[i, :, :] = state
-        self._actions[i]      = action
+        self._actions[i, :]   = action
         self._rewards[i]      = reward
         self._term[i]         = next is None
         if not self._term[i]:

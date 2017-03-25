@@ -2,10 +2,15 @@ import numpy as np
 import tensorflow as tf
 
 class QNetGraph(object):
-    def __init__(self, update, global_step, summaries=None):
-        self._update_target = update
-        self._summaries     = summaries
+    def __init__(self, global_step):
+        self._summaries     = None
         self._global_step   = global_step
+
+    def set_summaries(self, summaries):
+        self._summaries = summaries
+
+    def set_update_target(self, update_target):
+        self._update_target = update_target
 
     def set_policy_ops(self, input, output):
         self._policy_in  = input
@@ -26,9 +31,10 @@ class QNetGraph(object):
         return session.run([self._policy_out], feed_dict={self._policy_in:state})[0]
 
     def _train_feed(self, qs):
+        actions = np.reshape(qs.action, (len(qs.action),))
         feed = {self._train_current:  qs.current,
                 self._train_next:     qs.next,
-                self._train_chosen:   qs.action,
+                self._train_chosen:   actions,
                 self._train_reward:   qs.reward,
                 self._train_terminal: qs.terminal}
         return feed
@@ -61,26 +67,29 @@ class QNet(object):
 
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
-            self._qng = self._build_graph(arch, optimizer)
+            gstep = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+            self._qnet  = QNetGraph(gstep)
+            self._qnet  = self._build_graph(arch, optimizer)
+            self._qnet.set_summaries(tf.summary.merge_all())
 
-        return self._qng
+        return self._qnet
 
     def _build_graph(self, arch, optimizer):
         # the target net
         if self._use_target_net:
             with tf.variable_scope("target_network"):
                 target_input = self._make_input()
-                target_actions = self._build_q_net(target_input, self._num_actions, arch)
+                target_actions = self._build_q_net(target_input, arch)
                 tf.summary.histogram("target_action_scores", target_actions)
         else:
             with tf.variable_scope("value_network"):
                 target_input   = self._make_input()
-                target_actions = self._build_q_net(target_input, self._num_actions, arch)
+                target_actions = self._build_q_net(target_input, arch)
                 tf.summary.histogram("target_action_scores", target_actions)
 
         with tf.variable_scope("value_network", reuse=not self._use_target_net) as value_net_scope:
-            value_input = self._make_input()
-            value_actions   = self._build_q_net(value_input, self._num_actions, arch)
+            value_input   = self._make_input()
+            value_actions = self._build_q_net(value_input, arch)
             tf.summary.histogram("action_scores", value_actions)
 
         with tf.variable_scope("training"):
@@ -88,14 +97,13 @@ class QNet(object):
             chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
             terminal = tf.placeholder(tf.bool,    [None], name="terminal")
             discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
-            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
 
             # TODO debug to check that this does what i think it does
             # target vaues
             with tf.name_scope("target_Q"):
                 if self._double_q:
                     with tf.variable_scope(value_net_scope, reuse=True):
-                        proposed_actions = self._build_q_net(target_input, self._num_actions, arch)
+                        proposed_actions = self._build_q_net(target_input, arch)
                     best_action = tf.argmax(proposed_actions, axis=1)
                     best_future_q = choose_from_array(target_actions, best_action)
                 else:
@@ -109,12 +117,7 @@ class QNet(object):
 
             loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
             tf.summary.scalar("loss", loss)
-            # gradient clipping
-            grad_vars = optimizer.compute_gradients(loss)
-            capped = [(tf.clip_by_norm(gv[0], 0.5), gv[1]) for gv in grad_vars if gv[0] is not None]
-            train = optimizer.apply_gradients(capped, global_step=gstep)
-
-            #train = optimizer.minimize(loss, global_step=gstep)
+            train = self._make_training_op(optimizer, loss)
 
         if self._use_target_net:
             with tf.variable_scope("update_target_network"):
@@ -122,19 +125,27 @@ class QNet(object):
         else:
             update_target = tf.no_op()
         
-        qng = QNetGraph(update = update_target, global_step=gstep, summaries=tf.summary.merge_all())
-        qng.set_policy_ops(input = value_input, output = value_actions)
-        qng.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
+        self._qnet.set_update_target(update_target)
+        self._qnet.set_policy_ops(input = value_input, output = value_actions)
+        self._qnet.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
                             terminal = terminal, loss = loss, train = train)
-        return qng
+        return self._qnet
+
+    def _make_training_op(self, optimizer, loss):
+        # TODO allow configuration of whether we want to do gradient clipping
+        grad_vars = optimizer.compute_gradients(loss)
+        capped = [(tf.clip_by_norm(gv[0], 0.5), gv[1]) for gv in grad_vars if gv[0] is not None]
+        train = optimizer.apply_gradients(capped, global_step=self._qnet._global_step)
+        return train
 
     def _make_input(self, name="state"):
         return tf.placeholder(tf.float32, [None, self._history_length, self._state_size], name=name)
 
 
-    def _build_q_net(self, input, num_actions, arch):
+    def _build_q_net(self, input, arch):
         history_length = input.get_shape()[1].value
         state_size     = input.get_shape()[2].value
+        num_actions    = self._num_actions
         features = arch(input)
         if self._dueling_arch:
             return self._make_dueling_arch(features, num_actions)

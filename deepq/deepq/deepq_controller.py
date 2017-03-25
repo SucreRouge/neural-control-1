@@ -36,15 +36,15 @@ class DeepQController(object):
         self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
         self._minibatch_size  = minibatch_size
 
-        self._history        = History(duration=history_length, state_size=state_size)
-        self._state_memory   = Memory(size=memory_size, history_length=history_length, state_size=state_size)
-        self._session        = None
-        self._last_action    = None
+        self._history         = History(duration=history_length, state_size=state_size)
+        self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size)
+        self._session         = None
+        self._last_action     = None
 
         # counters
-        self._action_counter = 0
-        self._step_counter   = 0
-        self._epoch_counter  = 0
+        self._action_counter  = 0
+        self._step_counter    = 0
+        self._epoch_counter   = 0
 
     def observe(self, state, reward, test=False):
         # if this is the first state, there is no transition to remember,

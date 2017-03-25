@@ -55,6 +55,7 @@ class CopterEnv(gym.Env):
         self.action_space = spaces.Discrete(len(actions))
         self._actions = np.array(actions)
         self.threshold    = 5 * math.pi / 180
+        self.fail_threshold = 20 * math.pi / 180
 
         self._seed()
         self.viewer = None
@@ -90,7 +91,7 @@ class CopterEnv(gym.Env):
             rerr = err / self.threshold
             reward += 1.0 - rerr
 
-        if err > 1:
+        if err > self.fail_threshold:
             reward = -10
             done = True
 
