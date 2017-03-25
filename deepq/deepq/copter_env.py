@@ -46,10 +46,10 @@ class CopterEnv(gym.Env):
 
         # map discrete actions to control values
         actions = deque()
-        for u0 in [0, 0.5, 1]:
-            for u1 in [0, 0.05, 0.1]:
-                for u2 in [0, 0.05, 0.1]:
-                    for u3 in [0, 0.05, 0.1]:
+        for u0 in [0, 0.01, 0.02, 0.05]:
+            for u1 in [0, 0.01, 0.02, 0.05]:
+                for u2 in [0, 0.01, 0.02, 0.05]:
+                    for u3 in [0, 0.01, 0.02, 0.05]:
                         actions.append(np.array([u0, u1, u2, u3]))
 
         self.action_space = spaces.Discrete(len(actions))
@@ -85,14 +85,13 @@ class CopterEnv(gym.Env):
 
         done = bool(self._steps > 300)
 
+        reward = 0.01
         if err < self.threshold:
             rerr = err / self.threshold
-            reward = 1.0 - rerr
-        else:
-            reward = -1
+            reward += 1.0 - rerr
 
         if err > 1:
-            reward = -100
+            reward = -10
             done = True
 
         return self._get_state(), reward, done, {}
