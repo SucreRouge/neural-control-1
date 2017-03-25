@@ -25,15 +25,17 @@ class EGreedy(object):
 
 class DeepQController(object):
     def __init__(self, history_length, memory_size, state_size, num_actions,
-                    steps_per_epoch=10000, final_exploration_frame=1000000):
+                    steps_per_epoch=10000, final_exploration_frame=1000000,
+                    final_epsilon=0.1, minibatch_size=64):
         # configuration variables (these remain constant)
-        self._num_actions    = num_actions
-        self._state_size     = state_size
-        self._history_length = history_length
+        self._num_actions     = num_actions
+        self._state_size      = state_size
+        self._history_length  = history_length
         self._steps_per_epoch = steps_per_epoch
-        self._next_epoch     = None
-        self._policy         = EGreedy(1.0, 0.1, final_exploration_frame)
-        
+        self._next_epoch      = None
+        self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
+        self._minibatch_size  = minibatch_size
+
         self._history        = History(duration=history_length, state_size=state_size)
         self._state_memory   = Memory(size=memory_size, history_length=history_length, state_size=state_size)
         self._session        = None
@@ -82,7 +84,7 @@ class DeepQController(object):
 
         summary_writer = self._summary_writer if self._step_counter % 100 == 0 else None
 
-        sample = self._state_memory.sample(32)
+        sample = self._state_memory.sample(self._minibatch_size)
         ls = self._qnet.train_step(sample, self._session, summary_writer)
         self._step_counter += 1
         if self._step_counter > self._steps_per_epoch:
@@ -93,14 +95,15 @@ class DeepQController(object):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, arch, double_q=False):
+    def setup_graph(self, arch, target_net=True, double_q=False, learning_rate=1e-4):
         qnet = QNet(state_size     = self._state_size, 
                     history_length = self._history_length, 
                     num_actions    = self._num_actions,
-                    double_q       = double_q)
+                    double_q       = double_q,
+                    target_net     = target_net)
 
         # TODO Figure these out!
-        opt = tf.train.RMSPropOptimizer(learning_rate=1.0e-4, decay=0.99, epsilon=0.01, momentum=0.95)
+        opt = tf.train.RMSPropOptimizer(learning_rate=lerning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
         self._qnet = qnet.build_graph(arch, opt)
 
     def init(self, session, logger):

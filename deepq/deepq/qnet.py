@@ -46,7 +46,8 @@ class QNetGraph(object):
         session.run(self._update_target)
 
 class QNet(object):
-    def __init__(self, state_size, history_length, num_actions, graph = None, double_q=False):
+    def __init__(self, state_size, history_length, num_actions, graph = None, 
+                 target_net = True, double_q=False):
         if graph is None:
             graph = tf.get_default_graph()
 
@@ -55,6 +56,7 @@ class QNet(object):
         self._num_actions    = num_actions
         self._graph          = graph
         self._double_q       = double_q
+        self._use_target_net = target_net
 
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
@@ -64,12 +66,18 @@ class QNet(object):
 
     def _build_graph(self, arch, optimizer):
         # the target net
-        with tf.variable_scope("target_network"):
-            target_input = self._make_input()
-            target_actions = build_q_net(target_input, self._num_actions, arch)
-            tf.summary.histogram("target_action_scores", target_actions)
+        if self._use_target_net:
+            with tf.variable_scope("target_network"):
+                target_input = self._make_input()
+                target_actions = build_q_net(target_input, self._num_actions, arch)
+                tf.summary.histogram("target_action_scores", target_actions)
+        else:
+            with tf.variable_scope("value_network"):
+                target_input   = self._make_input()
+                target_actions = build_q_net(target_input, self._num_actions, arch)
+                tf.summary.histogram("target_action_scores", target_actions)
 
-        with tf.variable_scope("value_network") as value_net_scope:
+        with tf.variable_scope("value_network", reuse=not self._use_target_net) as value_net_scope:
             value_input = self._make_input()
             value_actions   = build_q_net(value_input, self._num_actions, arch)
             tf.summary.histogram("action_scores", value_actions)
@@ -91,7 +99,7 @@ class QNet(object):
                     best_future_q = choose_from_array(target_actions, best_action)
                 else:
                     best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")
-                state_value   = best_future_q * discount * tf.to_float(terminal) + reward
+                state_value   = best_future_q * discount * (1.0 - tf.to_float(terminal)) + reward
 
             # current values
             with tf.name_scope("current_Q"):
@@ -107,9 +115,11 @@ class QNet(object):
 
             #train = optimizer.minimize(loss, global_step=gstep)
 
-        with tf.variable_scope("update_target_network"):
-            update_target = assign_from_scope("value_network", "target_network")
-
+        if self._use_target_net:
+            with tf.variable_scope("update_target_network"):
+                update_target = assign_from_scope("value_network", "target_network")
+        else:
+            update_target = tf.no_op()
         qng = QNetGraph(update = update_target, global_step=gstep, summaries=tf.summary.merge_all())
         qng.set_policy_ops(input = value_input, output = value_actions)
         qng.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
