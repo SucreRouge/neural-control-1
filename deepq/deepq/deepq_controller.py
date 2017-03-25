@@ -103,7 +103,7 @@ class DeepQController(object):
                     target_net     = target_net)
 
         # TODO Figure these out!
-        opt = tf.train.RMSPropOptimizer(learning_rate=lerning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
+        opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
         self._qnet = qnet.build_graph(arch, opt)
 
     def init(self, session, logger):
