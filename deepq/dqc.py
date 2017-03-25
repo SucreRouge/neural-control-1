@@ -67,9 +67,9 @@ def test_callback():
         ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
         ax.set_autoscaley_on(False)
         ax.set_ylim([-2, 2])
-        ax.plot(track[:, 3])               # x
         ax.plot(track[:, 4])               # y
         ax.plot(track[:, 5])               # c
+        ax.plot(track[:, 3])               # x
         fig.savefig("test_%d.pdf"%test_counter)
         plt.close(fig)
 
