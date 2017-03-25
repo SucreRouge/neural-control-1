@@ -59,7 +59,7 @@ class ControlEnv(gym.Env):
 
         # random walk in target state
         if self.np_random.rand() < 0.05:
-            self._y += 0.2*(self.np_random.rand() - .5)
+            self._y += 0.25*(self.np_random.rand() - .5)
 
         return self._get_state(), reward, done, {}
 
@@ -67,7 +67,7 @@ class ControlEnv(gym.Env):
         self._x = self.np_random.uniform(low=0.0, high=1.0, size=(1,))[0]
         self._v = self.np_random.uniform(low=-0.05, high=0.05, size=(1,))[0]
         self._c = 0.0
-        self._y = 0.75 + 0.5*(self.np_random.rand() - 0.5)
+        self._y = 2*(self.np_random.rand() - 0.5)
         self._steps = 0
 
         self.steps_beyond_done = None
