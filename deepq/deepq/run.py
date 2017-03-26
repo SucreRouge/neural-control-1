@@ -1,5 +1,6 @@
 import numpy as np
 from collections import namedtuple, deque
+import numbers
 
 run_result=namedtuple("RunResult", ["total_reward", "episode_length", "expected_reward", "mean_q"])
 
@@ -69,8 +70,10 @@ class ControlRun(object):
             controller.observe(state=None if terminal else observation, reward=reward, test=test)
             
             if record:
-                track.append(np.concatenate([[episode_length, action, reward], observation]))
-
+                if isinstance(action, numbers.Real):
+                    track.append(np.concatenate([[episode_length, action, reward], observation]))
+                else:
+                    track.append(np.concatenate([[episode_length], action, [reward], observation]))
             if onstep:
                 onstep(task)
 
