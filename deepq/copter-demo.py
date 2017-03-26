@@ -67,9 +67,9 @@ def test_callback():
         ax.plot(track[:, 5])               # c
         ax.plot(track[:, 3])               # x
         """
-        ax.plot(track[:, 9])               # y
-        ax.plot(track[:, 10])              # c
-        ax.plot(track[:, 11])              # x
+        ax.plot(track[:, 12])              # y
+        ax.plot(track[:, 13])              # c
+        ax.plot(track[:, 14])              # x
         fig.savefig("test_%d.pdf"%test_counter)
         plt.close(fig)
 
@@ -84,11 +84,24 @@ def test_callback():
 
 
 task = CopterEnv()
+use_single = False
 
-controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
+# single controller
+if use_single:
+    controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),
               final_exploration_frame=2e5, minibatch_size=32)
-controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
+    controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
+# factored controller
+else:
+    controllers = [DiscreteDeepQController(history_length=10, memory_size=1e6, 
+              state_size=task.observation_space.shape[0], action_space=action_space.spaces.Discrete(17),
+              final_exploration_frame=2e5, minibatch_size=32) for i in range(4)]
+    for (i, controller) in enumerate(controllers):
+        with tf.variable_scope("controller_%d"%i):
+            controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
+    controller = NaiveMultiController(controllers, ActionSpace(task.action_space).discretized(17))
+
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 

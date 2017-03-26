@@ -77,7 +77,8 @@ class QNet(object):
             self._build_target_network(arch)
 
             self._qnet  = self._build_graph(arch, optimizer)
-            self._qnet.set_summaries(tf.summary.merge_all())
+            #self._qnet.set_summaries(tf.summary.merge_all())
+            self._qnet.set_summaries(tf.summary.scalar("dummy", 0))
 
         return self._qnet
 
@@ -99,7 +100,7 @@ class QNet(object):
         assert self._qnet._value_scope is not None, "Cannot build target network when value network does not exist"
         # the target net
         if self._use_target_net:
-            with tf.variable_scope("target_network"):
+            with tf.variable_scope("target_network") as target_scope:
                 state = self._make_input()
                 qvals = self._build_q_net(state, arch)
                 tf.summary.histogram("action_scores", qvals)
@@ -111,7 +112,7 @@ class QNet(object):
             tf.summary.histogram("action_scores", qvals)
 
         if self._use_target_net:
-            update_target = assign_from_scope("value_network", "target_network", name="update_target_network")
+            update_target = assign_from_scope(self._qnet._value_scope, target_scope, name="update_target_network")
         else:
             update_target = tf.no_op()
 
@@ -194,6 +195,11 @@ class QNet(object):
 
 # tf helper functions
 def assign_from_scope(source_scope, target_scope, name=None):
+    if isinstance(source_scope, tf.VariableScope):
+        source_scope = source_scope.name
+    if isinstance(target_scope, tf.VariableScope):
+        target_scope = target_scope.name
+
     source_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=source_scope)
     target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=target_scope)
     asgns = []
