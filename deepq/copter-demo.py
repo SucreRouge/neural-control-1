@@ -105,5 +105,5 @@ else:
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 
-run(task=task, controller=controller, num_frames=1e6, test_every=2e4, 
+run(task=task, controller=controller, num_frames=1e7, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())

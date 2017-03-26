@@ -67,9 +67,11 @@ class QNet(object):
         self._double_q       = double_q
         self._use_target_net = target_net
         self._dueling_arch   = dueling
+        self._summaries      = []
 
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
+            self._summaries = []
             gstep = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
             self._qnet  = QNetGraph(gstep)
 
@@ -77,8 +79,8 @@ class QNet(object):
             self._build_target_network(arch)
 
             self._qnet  = self._build_graph(arch, optimizer)
-            #self._qnet.set_summaries(tf.summary.merge_all())
-            self._qnet.set_summaries(tf.summary.scalar("dummy", 0))
+            self._qnet.set_summaries(tf.summary.merge(self._summaries))
+            self._summaries = []
 
         return self._qnet
 
@@ -87,7 +89,7 @@ class QNet(object):
         with tf.variable_scope("value_network") as value_net_scope:
             value_input   = self._make_input()
             value_actions = self._build_q_net(value_input, arch)
-            tf.summary.histogram("action_scores", value_actions)
+            self._summaries.append(tf.summary.histogram("action_scores", value_actions))
 
         self._qnet.set_value_network(input = value_input, output = value_actions, scope = value_net_scope)
 
@@ -103,13 +105,13 @@ class QNet(object):
             with tf.variable_scope("target_network") as target_scope:
                 state = self._make_input()
                 qvals = self._build_q_net(state, arch)
-                tf.summary.histogram("action_scores", qvals)
+                self._summaries.append(tf.summary.histogram("action_scores", qvals))
         else:
             with tf.name_scope("target_network"):
                 with tf.variable_scope(self._qnet._value_scope, reuse=True):
                     state = self._make_input()
                     qvals = self._build_q_net(state, arch)
-            tf.summary.histogram("action_scores", qvals)
+            self._summaries.append(tf.summary.histogram("action_scores", qvals))
 
         if self._use_target_net:
             update_target = assign_from_scope(self._qnet._value_scope, target_scope, name="update_target_network")
@@ -151,12 +153,12 @@ class QNet(object):
             # current values
             with tf.name_scope("current_Q"):
                 current_q     = choose_from_array(value_actions, chosen)
-                tf.summary.scalar("mean_Q", tf.reduce_mean(current_q))
+                self._summaries.append(tf.summary.scalar("mean_Q", tf.reduce_mean(current_q)))
 
 
         with tf.variable_scope("training"):
             loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
-            tf.summary.scalar("loss", loss)
+            self._summaries.append(tf.summary.scalar("loss", loss))
             train = self._make_training_op(optimizer, loss)
         
         self._qnet.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
@@ -167,7 +169,7 @@ class QNet(object):
         # TODO allow configuration of whether we want to do gradient clipping
         grad_vars = optimizer.compute_gradients(loss)
         with tf.name_scope("clip_gradient"):
-            capped = [(tf.clip_by_norm(gv[0], 0.5), gv[1]) for gv in grad_vars if gv[0] is not None]
+            capped = [(tf.clip_by_norm(gv[0], 5.0), gv[1]) for gv in grad_vars if gv[0] is not None]
         train = optimizer.apply_gradients(capped, global_step=self._qnet._global_step)
         return train
 
