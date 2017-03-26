@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from .memory import History, Memory
 from .qnet import QNet
+from .action_space import ActionSpace, flatten
 
 class EGreedy(object):
     def __init__(self, start_eps, end_eps, num_steps):
@@ -23,12 +24,21 @@ class EGreedy(object):
             return np.argmax(actions)
 
 
-class DeepQController(object):
-    def __init__(self, history_length, memory_size, state_size, num_actions,
+class DiscreteDeepQController(object):
+    def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, final_exploration_frame=1000000,
                     final_epsilon=0.1, minibatch_size=64):
         # configuration variables (these remain constant)
-        self._num_actions     = num_actions
+        action_space = ActionSpace(action_space)
+        if action_space.is_compound:
+            try:
+                print("Trying to flatten compound action space")
+                action_space = flatten(action_space)
+            except: pass
+
+        assert action_space.is_discrete and not action_space.is_compound, "DiscreteDeepQController works one dimensional discrete action spaces"
+        self._action_space    = action_space
+        self._num_actions     = action_space.num_actions
         self._state_size      = state_size
         self._history_length  = history_length
         self._steps_per_epoch = steps_per_epoch
@@ -76,7 +86,7 @@ class DeepQController(object):
             self._action_counter += 1
             self._policy.set_stepcount(self._action_counter)
         
-        return action, action_vals
+        return self._action_space.get_action(action), action_vals
 
     def train(self):
         if len(self._state_memory) < 10000:

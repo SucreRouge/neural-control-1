@@ -61,7 +61,7 @@ def test_callback():
         fig, ax = plt.subplots(1,1)
         ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
         ax.set_autoscaley_on(False)
-        ax.set_ylim([-2, 2])
+        ax.set_ylim([-math.pi/2, math.pi/2])
         """
         ax.plot(track[:, 4])               # y
         ax.plot(track[:, 5])               # c
@@ -85,8 +85,8 @@ def test_callback():
 
 task = CopterEnv()
 
-controller = DeepQController(history_length=10, memory_size=1e6, 
-              state_size=task.observation_space.shape[0], num_actions=task.action_space.n,
+controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
+              state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),
               final_exploration_frame=2e5, minibatch_size=32)
 controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)

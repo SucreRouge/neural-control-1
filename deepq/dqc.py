@@ -79,8 +79,8 @@ def test_callback():
 
     return call
 
-controller = DeepQController(history_length=10, memory_size=1000000, 
-              state_size=task.observation_space.shape[0], num_actions=task.action_space.n,
+controller = DiscreteDeepQController(history_length=10, memory_size=1000000, 
+              state_size=task.observation_space.shape[0], action_space=task.action_space,
               final_exploration_frame=1e5, minibatch_size=32)
 controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)

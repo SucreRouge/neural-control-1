@@ -43,17 +43,8 @@ class CopterEnv(gym.Env):
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
+        self.action_space = spaces.Box(-1, 1, (4,))
 
-        # map discrete actions to control values
-        actions = deque()
-        for u0 in [-0.05, 0.0, 0.05]:
-            for u1 in [-0.05, 0.0, 0.05]:
-                for u2 in [-0.05, 0.0, 0.05]:
-                    for u3 in [-0.05, 0.0, 0.05]:
-                        actions.append(np.array([u0, u1, u2, u3]))
-
-        self.action_space = spaces.Discrete(len(actions))
-        self._actions = np.array(actions)
         self.threshold    = 5 * math.pi / 180
         self.fail_threshold = 20 * math.pi / 180
 
@@ -70,7 +61,7 @@ class CopterEnv(gym.Env):
     def _step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         
-        control = self._actions[action]
+        control = np.array(action) * 0.05
         dt      = 0.1
 
         ap, aa = self._calc_acceleration(control)
@@ -86,7 +77,7 @@ class CopterEnv(gym.Env):
 
         done = bool(self._steps > 300)
 
-        reward = 0.01
+        reward = 0.1
         if err < self.threshold:
             rerr = err / self.threshold
             reward += 1.0 - rerr
