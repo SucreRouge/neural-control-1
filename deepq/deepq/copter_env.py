@@ -77,7 +77,7 @@ class CopterEnv(gym.Env):
 
         done = bool(self._steps > 300)
 
-        reward = 0.1
+        reward = 0.2
         if err < self.threshold:
             rerr = err / self.threshold
             reward += 1.0 - rerr
@@ -141,7 +141,8 @@ class CopterEnv(gym.Env):
 
     def _get_state(self):
         s = self.copterstatus
-        return np.concatenate([s.position, s.velocity, s.attitude, s.angular_velocity])
+        # currently, we ignore position and velocity!
+        return np.concatenate([s.attitude, s.angular_velocity])
 
     def _render(self, mode='human', close=False):
         # currently not implemented
