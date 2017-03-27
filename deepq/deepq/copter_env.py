@@ -39,7 +39,7 @@ class CopterEnv(gym.Env):
     }
 
     def __init__(self):
-        high = np.array([np.inf]*12)
+        high = np.array([np.inf]*6)
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
