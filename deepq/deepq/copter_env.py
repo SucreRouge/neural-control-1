@@ -75,9 +75,10 @@ class CopterEnv(gym.Env):
         # TODO currently, target attitude is 0
         err = np.max(np.abs(quad.attitude))
 
-        done = bool(self._steps > 300)
+        self._steps += 1
+        done = bool(self._steps > 500)
 
-        reward = 0.2
+        reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
             rerr = err / self.threshold
             reward += 1.0 - rerr

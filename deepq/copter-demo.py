@@ -61,15 +61,15 @@ def test_callback():
         fig, ax = plt.subplots(1,1)
         ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
         ax.set_autoscaley_on(False)
-        ax.set_ylim([-math.pi/4, math.pi/4])
+        ax.set_ylim([-25, 25])
         """
         ax.plot(track[:, 4])               # y
         ax.plot(track[:, 5])               # c
         ax.plot(track[:, 3])               # x
         """
-        ax.plot(track[:, 6])              # y
-        ax.plot(track[:, 7])              # c
-        ax.plot(track[:, 8])              # x
+        ax.plot(track[:, 6] * 180/math.pi)              # y
+        ax.plot(track[:, 7] * 180/math.pi)              # c
+        ax.plot(track[:, 8] * 180/math.pi)              # x
         fig.savefig("test_%d.pdf"%test_counter)
         plt.close(fig)
 
