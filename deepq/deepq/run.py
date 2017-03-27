@@ -37,7 +37,7 @@ class ControlRun(object):
             total_frames += result.episode_length
             self._episode_count += 1
             if self._on_finish_episode:
-                self._on_finish_episode(result)
+                self._on_finish_episode(total_frames, result)
             self.reset_task()
             if total_frames > self._next_test:
                 self.test()

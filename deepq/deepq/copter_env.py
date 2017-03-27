@@ -46,7 +46,7 @@ class CopterEnv(gym.Env):
         self.action_space = spaces.Box(-1, 1, (4,))
 
         self.threshold    = 5 * math.pi / 180
-        self.fail_threshold = 20 * math.pi / 180
+        self.fail_threshold = 15 * math.pi / 180
 
         self._seed()
         self.viewer = None
@@ -80,8 +80,9 @@ class CopterEnv(gym.Env):
 
         reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
-            rerr = err / self.threshold
-            reward += 1.0 - rerr
+            merr = np.mean(np.abs(quad.attitude)) # this is guaranteed to be smaller than err
+            rerr = merr / self.threshold
+            reward += 1.1 - rerr
 
         if err > self.fail_threshold:
             reward = -10
