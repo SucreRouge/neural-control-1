@@ -157,21 +157,25 @@ class QNet(object):
 
 
         with tf.variable_scope("training"):
-            loss  = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
+            num_samples = tf.shape(current_q)[0]
+            loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
+            # error clipping
+            with tf.name_scope("clipped_error_gradient"):
+                bound = 1.0/tf.to_float(num_samples)
+                q_error = tf.clip_by_value(tf.gradients(loss, [current_q])[0], -bound, bound)
+
+            # get all further gradients
+            tvars = tf.trainable_variables()
+            tgrads = tf.gradients(current_q, tvars, q_error)
+            grads_and_vars = zip(tgrads, tvars)
+
             self._summaries.append(tf.summary.scalar("loss", loss))
-            train = self._make_training_op(optimizer, loss)
+            train = optimizer.apply_gradients(grads_and_vars, global_step=self._qnet._global_step)
         
         self._qnet.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
                             terminal = terminal, loss = loss, train = train)
         return self._qnet
 
-    def _make_training_op(self, optimizer, loss):
-        # TODO allow configuration of whether we want to do gradient clipping
-        grad_vars = optimizer.compute_gradients(loss)
-        with tf.name_scope("clip_gradient"):
-            capped = [(tf.clip_by_norm(gv[0], 5.0), gv[1]) for gv in grad_vars if gv[0] is not None]
-        train = optimizer.apply_gradients(capped, global_step=self._qnet._global_step)
-        return train
 
     def _make_input(self, name="state"):
         return tf.placeholder(tf.float32, [None, self._history_length, self._state_size], name=name)
