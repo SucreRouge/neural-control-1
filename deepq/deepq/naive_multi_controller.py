@@ -1,10 +1,13 @@
+from .controller import Controller
 
 class FakePolicy:
     def __init__(self):
         self.epsilon = 1.0
 
-class NaiveMultiController(object):
+class NaiveMultiController(Controller):
     def __init__(self, sub_controllers, action_space):
+        super(NaiveMultiController, self).__init__(action_space)
+
         self._sub_controllers = sub_controllers
         self._action_space    = action_space
         self._epoch_counter   = 0
@@ -23,6 +26,8 @@ class NaiveMultiController(object):
         return actions, values
 
     def init(self, session, logger):
+        super(NaiveMultiController, self).init(session, logger)
+        
         for ctrl in self._sub_controllers:
             ctrl.init(session, logger)
 

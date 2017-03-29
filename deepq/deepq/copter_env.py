@@ -45,6 +45,7 @@ class CopterEnv(gym.Env):
         self.observation_space = spaces.Box(-high, high)
         self.action_space = spaces.Box(-1, 1, (4,))
 
+        self.target = np.zeros(3)
         self.threshold    = 5 * math.pi / 180
         self.fail_threshold = 15 * math.pi / 180
 
@@ -73,7 +74,7 @@ class CopterEnv(gym.Env):
         quad.angular_velocity += aa * dt
 
         # TODO currently, target attitude is 0
-        err = np.max(np.abs(quad.attitude))
+        err = np.max(np.abs(quad.attitude - self.target))
 
         self._steps += 1
         done = bool(self._steps > 500)
@@ -87,6 +88,10 @@ class CopterEnv(gym.Env):
         if err > self.fail_threshold:
             reward = -10
             done = True
+
+        # random disturbances
+        if self.np_random.rand() < 0.01:
+            self.copterstatus.angular_velocity += self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
 
         return self._get_state(), reward, done, {}
 
@@ -135,6 +140,7 @@ class CopterEnv(gym.Env):
     def _reset(self):
         self.copterstatus = CopterStatus()
         # start in resting position, but with low angular velocity
+        self.copterstatus.attitude = self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self.copterstatus.angular_velocity = self.np_random.uniform(low=-0.1, high=0.1, size=(3,))
         self._steps = 0
 

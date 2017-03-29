@@ -3,6 +3,7 @@ import tensorflow as tf
 from .memory import History, Memory
 from .qnet import QNet
 from .action_space import ActionSpace, flatten
+from .controller import Controller
 
 class EGreedy(object):
     def __init__(self, start_eps, end_eps, num_steps):
@@ -24,10 +25,11 @@ class EGreedy(object):
             return np.argmax(actions)
 
 
-class DiscreteDeepQController(object):
+class DiscreteDeepQController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, final_exploration_frame=1000000,
                     final_epsilon=0.1, minibatch_size=64):
+
         # configuration variables (these remain constant)
         action_space = ActionSpace(action_space)
         if action_space.is_compound:
@@ -37,7 +39,8 @@ class DiscreteDeepQController(object):
             except: pass
 
         assert action_space.is_discrete and not action_space.is_compound, "DiscreteDeepQController works one dimensional discrete action spaces"
-        self._action_space    = action_space
+        super(DiscreteDeepQController, self).__init__(action_space)
+        
         self._num_actions     = action_space.num_actions
         self._state_size      = state_size
         self._history_length  = history_length
@@ -119,7 +122,7 @@ class DiscreteDeepQController(object):
         self._qnet = qnet.build_graph(arch, opt)
 
     def init(self, session, logger):
-        self._session = session
+        super(DiscreteDeepQController, self).init(session, logger)
+
         self._session.run([tf.global_variables_initializer()])
         self._qnet.update_target(self._session)
-        self._summary_writer = logger

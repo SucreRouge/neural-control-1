@@ -19,15 +19,6 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 from scipy import stats
 
-def arch(inp):
-    c1 = tf.layers.conv1d(inp, 64, 3, padding='same', activation=tf.nn.relu, name="conv1")
-    c2 = tf.layers.conv1d(c1,  32, 3, padding='same', activation=tf.nn.relu, name="conv2")
-
-    s = [d.value for d in c2.get_shape()]
-    flat = tf.reshape(c2, [-1, s[1]*s[2]])
-    fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
-    return fc
-
 def episode_callback():
     reward_hist   = deque()
     expected_hist = deque()
@@ -73,7 +64,7 @@ def test_callback():
         ax.plot(track[:, 6] * 180/math.pi)              # y
         ax.plot(track[:, 7] * 180/math.pi)              # c
         ax.plot(track[:, 8] * 180/math.pi)              # x
-        fig.savefig("test_%d.pdf"%test_counter)
+        fig.savefig("tests/test_%d.pdf"%test_counter)
         plt.close(fig)
 
         rwd_h = np.array(reward_hist)
@@ -85,6 +76,14 @@ def test_callback():
 
     return call
 
+def arch(inp):
+    c1 = tf.layers.conv1d(inp, 64, 3, padding='same', activation=tf.nn.relu, name="conv1")
+    c2 = tf.layers.conv1d(c1,  32, 3, padding='same', activation=tf.nn.relu, name="conv2")
+
+    s = [d.value for d in c2.get_shape()]
+    flat = tf.reshape(c2, [-1, s[1]*s[2]])
+    fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
+    return fc
 
 task = CopterEnv()
 use_single = False
@@ -97,7 +96,7 @@ if use_single:
     controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
 # factored controller
 else:
-    controllers = [DiscreteDeepQController(history_length=10, memory_size=2e6, 
+    controllers = [DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=action_space.spaces.Discrete(9),
               steps_per_epoch=20000, final_exploration_frame=5e5, minibatch_size=32) 
                   for i in range(4)]
