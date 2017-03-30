@@ -1,5 +1,9 @@
 import tensorflow as tf
 
+def current_name_scope():
+    with tf.name_scope("") as scope:
+        return scope
+
 # tf helper functions
 def assign_from_scope(source_scope, target_scope, name=None):
     if isinstance(source_scope, tf.VariableScope):

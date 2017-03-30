@@ -1,5 +1,5 @@
-from .builder import NetworkBuilder
 import tensorflow as tf
+from .builder import NetworkBuilder
 
 class ContinuousQNetwork(object):
     def __init__(self, state, action, q_value, scope, summaries):
@@ -32,17 +32,23 @@ class ContinuousQNetwork(object):
 
 class ContinuousQBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, state_features, full_features):
-        super(DiscreteQBuilder, self).__init__(state_size     = state_size, 
+        super(ContinuousQBuilder, self).__init__(state_size     = state_size, 
                                                history_length = history_length,
                                                num_actions    = num_actions)
         self._state_features = state_features
         self._full_features  = full_features
 
-    def _build(self, state = None, action = None):
-        state  = self.make_state_input("state") if state is None else state
-        action = self.make_action_input("action") if action is None else action
+    def _build(self, inputs):
+        state = inputs.get("state", None)
+        if state is None:
+            state = self.make_state_input("state")
+        
+        action = inputs.get("action", None)
+        if action is None:
+            action = self.make_action_input("action")
 
-        state_features = self._state_features(state)
+        with tf.variable_scope("state_features"):
+            state_features = self._state_features(state)
         full_data = tf.concat([state_features, action], axis=1)
         full_features  = self._full_features(full_data)
 

@@ -1,4 +1,5 @@
 import tensorflow as tf
+from ..utils import assign_from_scope
 
 # graph builder base class with utilities
 class NetworkBuilder(object):
@@ -28,8 +29,10 @@ class NetworkBuilder(object):
         # TODO generalize this function so that it handles both discrete and continuous cases gracefully
         return tf.placeholder(tf.float32, [None, self.num_actions], name=name)
 
-    def build(self, graph = None, name_scope = None, var_scope = None, reuse = None, **kwargs):
-        graph = graph if graph is not None else tf.get_default_graph()
+    def build(self, graph = None, name_scope = None, var_scope = None, reuse = None, inputs=None, **kwargs):
+        inputs = inputs if inputs is not None else {} 
+        graph  = graph  if graph  is not None else tf.get_default_graph()
+
         with graph.as_default():
             if name_scope is not None:
                 name_scope = tf.name_scope(name_scope).__enter__()
@@ -43,8 +46,20 @@ class NetworkBuilder(object):
             with tf.variable_scope(var_scope, reuse = reuse):
                 if name_scope is not None:
                     with tf.name_scope(name_scope):
-                        net = self._build(**kwargs)
+                        net = self._build(inputs = inputs, **kwargs)
                 else:
-                    net = self._build(**kwargs)
+                    net = self._build(inputs = inputs, **kwargs)
             self._summaries = None
             return net
+
+    def build_with_target(self, graph = None, scope = None, share=False, inputs = None, target_inputs = None, **kwargs):
+        kwargs['graph'] = graph
+        value  = self.build(name_scope = scope, var_scope = scope, reuse = False, inputs = inputs, **kwargs)
+        tvsc   = scope if share else scope + '_target'  
+        target = self.build(name_scope = scope+'_target', var_scope = tvsc, reuse=share, inputs = target_inputs, **kwargs)
+        if share:
+            with tf.name_scope(scope+'_target'):
+                update = tf.no_op()
+        else:
+            update = assign_from_scope(scope, tvsc, name=scope+"_update")
+        return value, target, update

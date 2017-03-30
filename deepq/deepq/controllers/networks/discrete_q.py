@@ -1,5 +1,5 @@
-from .builder import NetworkBuilder
 import tensorflow as tf
+from .builder import NetworkBuilder
 
 class DiscreteQNetwork(object):
     def __init__(self, state, q_values, scope, summaries):
@@ -37,8 +37,11 @@ class DiscreteQBuilder(NetworkBuilder):
     def dueling_arch(self):
         return self._dueling_arch
 
-    def _build(self, state = None):
-        state = self.make_state_input("state") if state is None else state
+    def _build(self, inputs):
+        state = inputs.get("state", None)
+        if state is None:
+            state = self.make_state_input("state")
+
         if self.dueling_arch:
             q_values = self._make_dueling_arch(state)
         else:

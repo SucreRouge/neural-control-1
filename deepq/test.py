@@ -55,9 +55,16 @@ def arch(inp):
     fc = tf.layers.dense(flat, 128, name="fc")
     return fc
 
-controller = DiscreteDeepQController(history_length=10, memory_size=1000000, 
-              state_size=10, action_space=spaces.Discrete(5),
-              final_exploration_frame=1e5, minibatch_size=32)
-controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4, graph=graph)
+def arch2(inp):
+    fc = tf.layers.dense(inp, 128, name="a2fc")
+    return fc
 
+#controller = DiscreteDeepQController(history_length=10, memory_size=1000000, 
+#              state_size=10, action_space=spaces.Discrete(5),
+#              final_exploration_frame=1e5, minibatch_size=32)
+#controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4, graph=graph)
+
+from deepq.controllers.networks import *
+ac = ActorCriticBuilder(history_length = 10, state_size = 10, num_actions = 5, state_features=arch, full_features=arch2)
+ac.build(graph)
 show_graph(graph)
