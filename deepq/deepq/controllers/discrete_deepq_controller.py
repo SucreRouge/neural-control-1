@@ -53,11 +53,10 @@ class DiscreteDeepQController(Controller):
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size)
 
         # counters
-        self._action_counter  = 0
         self._step_counter    = 0
         self._epoch_counter   = 0
 
-    def observe(self, state, reward, test=False):
+    def _observe(self, state, reward, test=False):
         # if this is the first state, there is no transition to remember,
         # so simply add to the state history
         if self._last_action is None:
@@ -83,8 +82,7 @@ class DiscreteDeepQController(Controller):
         action_vals   = self._qnet.get_actions(full_state, self.session)
         action        = self._policy(action_vals, test)
         if not test:
-            self._action_counter += 1
-            self._policy.set_stepcount(self._action_counter)
+            self._policy.set_stepcount(self.frame_count)
         
         return action, action_vals
 

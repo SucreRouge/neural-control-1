@@ -34,7 +34,7 @@ class History(object):
 
     def observe(self, state):
         check_np_array(state, 1)
-        assert state.shape[0] == self._state_size
+        assert state.shape[0] == self.state_size
 
         self._history.append(state)
         return self.state

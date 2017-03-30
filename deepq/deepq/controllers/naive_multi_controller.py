@@ -11,9 +11,8 @@ class NaiveMultiController(Controller):
         self._sub_controllers = sub_controllers
         self._epoch_counter   = 0
         self._policy = FakePolicy()
-        self._action_counter  = 0
 
-    def observe(self, state, reward, test=False):
+    def _observe(self, state, reward, test=False):
         for ctrl in self._sub_controllers:
             ctrl.observe(state, reward, test)
 
@@ -21,7 +20,6 @@ class NaiveMultiController(Controller):
         action_value_tuples = [ctrl.get_action(test) for ctrl in self._sub_controllers]
         actions = [a for (a, v) in action_value_tuples]
         values  = [v for (a, v) in action_value_tuples]
-        self._action_counter += 1
         return actions, values
 
     def init(self, session, logger):
