@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from .memory import History, Memory
 from .qnet import QNet
-from .action_space import ActionSpace, flatten
+from ..action_space import ActionSpace, flatten
 from .controller import Controller
 
 class EGreedy(object):
@@ -51,8 +51,6 @@ class DiscreteDeepQController(Controller):
 
         self._history         = History(duration=history_length, state_size=state_size)
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size)
-        self._session         = None
-        self._last_action     = None
 
         # counters
         self._action_counter  = 0
@@ -80,16 +78,15 @@ class DiscreteDeepQController(Controller):
         if not test:
             self._state_memory.append(state=last_state, next=next_state, reward=reward, action=action)
 
-    def get_action(self, test=False):
+    def _get_action(self, test=False):
         full_state    = self._history.state
-        action_vals   = self._qnet.get_actions(full_state, self._session)
+        action_vals   = self._qnet.get_actions(full_state, self.session)
         action        = self._policy(action_vals, test)
-        self._last_action = action
         if not test:
             self._action_counter += 1
             self._policy.set_stepcount(self._action_counter)
         
-        return self._action_space.get_action(action), action_vals
+        return action, action_vals
 
     def train(self):
         if len(self._state_memory) < 10000:

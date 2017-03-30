@@ -1,11 +1,14 @@
 import tensorflow as tf
-from .action_space import ActionSpace
+from ..action_space import ActionSpace
 
 class Controller(object):
     def __init__(self, action_space):
         self._session        = None
         self._summary_writer = None
         self._action_space   = ActionSpace(action_space)
+
+        # tracking variables
+        self._last_action = None
 
     @property
     def session(self):
@@ -18,7 +21,12 @@ class Controller(object):
     def observe(self, state, reward, test=False):
         pass
 
-    def get_action(self, test=False):
+    def get_action(self, test = False):
+        a, v = self._get_action(test)
+        self._last_action = a
+        return self.action_space.get_action(a), v
+
+    def _get_action(self, test):
         raise NotImplementedError()
 
     def train(self):
