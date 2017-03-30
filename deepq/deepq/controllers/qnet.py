@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from .utils import *
 
 class QNetGraph(object):
     def __init__(self, global_step):
@@ -19,12 +20,17 @@ class QNetGraph(object):
         self._target_out    = output
         self._target_update = update
 
-    def set_training_ops(self, current, chosen, reward, next, terminal, loss, train):
-        self._train_current  = current
-        self._train_chosen   = chosen 
-        self._train_reward   = reward 
-        self._train_next     = next
-        self._train_terminal = terminal
+    def set_bellman_ops(self, current, chosen, reward, next, terminal, current_q,
+                        target_q):
+        self._bellman_current  = current
+        self._bellman_chosen   = chosen
+        self._bellman_reward   = reward
+        self._bellman_next     = next
+        self._bellman_terminal = terminal
+        self._bellman_currentQ = current_q
+        self._bellman_targetQ  = target_q
+
+    def set_training_ops(self, loss, train):
         self._train_loss     = loss
         self._train_step     = train
 
@@ -35,11 +41,11 @@ class QNetGraph(object):
 
     def _train_feed(self, qs):
         actions = np.reshape(qs.action, (len(qs.action),))
-        feed = {self._train_current:  qs.current,
-                self._train_next:     qs.next,
-                self._train_chosen:   actions,
-                self._train_reward:   qs.reward,
-                self._train_terminal: qs.terminal}
+        feed = {self._bellman_current:  qs.current,
+                self._bellman_next:     qs.next,
+                self._bellman_chosen:   actions,
+                self._bellman_reward:   qs.reward,
+                self._bellman_terminal: qs.terminal}
         return feed
 
     def train_step(self, qs, session, summary_writer=None):
@@ -72,13 +78,16 @@ class QNet(object):
     def build_graph(self, arch, optimizer):
         with self._graph.as_default():
             self._summaries = []
-            gstep = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+            discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
             self._qnet  = QNetGraph(gstep)
 
             self._build_value_network(arch)
             self._build_target_network(arch)
+            with tf.variable_scope("bellman_update"):
+                current_q, updated_q = self._build_bellman_update(discount, arch)
 
-            self._qnet  = self._build_graph(arch, optimizer)
+            self._qnet  = self._build_training(optimizer)
             self._qnet.set_summaries(tf.summary.merge(self._summaries))
             self._summaries = []
 
@@ -120,45 +129,51 @@ class QNet(object):
 
         self._qnet.set_target_network(input = state, output = qvals, update = update_target)
 
+    def _build_bellman_update(self, discount, arch):
+        reward   = tf.placeholder(tf.float32, [None], name="reward")
+        chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
+        terminal = tf.placeholder(tf.bool,    [None], name="terminal")
 
-    def _build_graph(self, arch, optimizer):
-        with tf.variable_scope("bellman_update"):
-            reward   = tf.placeholder(tf.float32, [None], name="reward")
-            chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
-            terminal = tf.placeholder(tf.bool,    [None], name="terminal")
-            discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
-
-            target_input   = self._qnet._target_in
-            target_actions = self._qnet._target_out
-            value_input    = self._qnet._value_in
-            value_actions  = self._qnet._value_out
+        target_input   = self._qnet._target_in
+        value_input    = self._qnet._value_in
+        target_actions = self._qnet._target_out
+        value_actions  = self._qnet._value_out
 
 
-            # TODO debug to check that this does what i think it does
-            # target vaues
-            with tf.name_scope("future_reward"):
-                if self._double_q:
-                    with tf.name_scope("double_q"):
-                        with tf.variable_scope(self._qnet._value_scope, reuse=True):
-                            proposed_actions = self._build_q_net(target_input, arch)
-                        best_action = tf.argmax(proposed_actions, axis=1, name="best_action")
-                    best_future_q = choose_from_array(target_actions, best_action)
-                else:
-                    best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")                
-                future_rwd = best_future_q * (1.0 - tf.to_float(terminal))
+        # TODO debug to check that this does what i think it does
+        # target vaues
+        with tf.name_scope("future_reward"):
+            if self._double_q:
+                with tf.name_scope("double_q"):
+                    with tf.variable_scope(self._qnet._value_scope, reuse=True):
+                        proposed_actions = self._build_q_net(target_input, arch)
+                    best_action = tf.argmax(proposed_actions, axis=1, name="best_action")
+                best_future_q = choose_from_array(target_actions, best_action)
+            else:
+                best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")                
+            future_rwd = best_future_q * (1.0 - tf.to_float(terminal))
 
-            with tf.name_scope("updated_Q"):
-                state_value = discount * future_rwd + reward
+        with tf.name_scope("updated_Q"):
+            target_q = discount * future_rwd + reward
 
-            # current values
-            with tf.name_scope("current_Q"):
-                current_q     = choose_from_array(value_actions, chosen)
-                self._summaries.append(tf.summary.scalar("mean_Q", tf.reduce_mean(current_q)))
+        # current values
+        with tf.name_scope("current_Q"):
+            current_q     = choose_from_array(value_actions, chosen)
+            self._summaries.append(tf.summary.scalar("mean_Q", tf.reduce_mean(current_q)))
 
+        self._qnet.set_bellman_ops(current  = value_input, next   = target_input, 
+                                   chosen   = chosen,      reward = reward,
+                                   terminal = terminal,    current_q = current_q,
+                                   target_q = target_q)
 
+        return current_q, target_q
+
+    def _build_training(self, optimizer):
+        current_q = self._qnet._bellman_currentQ
+        target_q  = self._qnet._bellman_targetQ
         with tf.variable_scope("training"):
             num_samples = tf.shape(current_q)[0]
-            loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(state_value), scope='loss')
+            loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
             # error clipping
             with tf.name_scope("clipped_error_gradient"):
                 bound = 1.0/tf.to_float(num_samples)
@@ -172,8 +187,7 @@ class QNet(object):
             self._summaries.append(tf.summary.scalar("loss", loss))
             train = optimizer.apply_gradients(grads_and_vars, global_step=self._qnet._global_step)
         
-        self._qnet.set_training_ops(current = value_input, next = target_input, chosen = chosen, reward = reward,
-                            terminal = terminal, loss = loss, train = train)
+        self._qnet.set_training_ops(loss = loss, train = train)
         return self._qnet
 
 
@@ -198,31 +212,4 @@ class QNet(object):
         with tf.name_scope("q_values"):
             q_vals = state_vals + action_vals - tf.reduce_mean(action_vals, axis=1, keep_dims=True)
         return q_vals  
-
-# tf helper functions
-def assign_from_scope(source_scope, target_scope, name=None):
-    if isinstance(source_scope, tf.VariableScope):
-        source_scope = source_scope.name
-    if isinstance(target_scope, tf.VariableScope):
-        target_scope = target_scope.name
-
-    source_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=source_scope)
-    target_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=target_scope)
-    asgns = []
-    with tf.name_scope(name):
-        for source in source_vars:
-            for target in target_vars:
-                source_name = source.name[len(source_scope):]
-                target_name = target.name[len(target_scope):]
-                if source_name == target_name:
-                    asgns.append(target.assign(source))
-        return tf.group(*asgns)
-
-def choose_from_array(source, indices):
-    """ returns [source[i, indices[i]] for i in 1:len(indices)] """
-    with tf.name_scope("choose_from_array"):
-        num_samples = tf.shape(indices)[0]
-        indices     = tf.transpose(tf.stack([tf.cast(tf.range(0, num_samples), indices.dtype), indices]))
-        values      = tf.gather_nd(source, indices)
-    return values
 
