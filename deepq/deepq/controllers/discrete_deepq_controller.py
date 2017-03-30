@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from .memory import History, Memory
-from .qnet import QNet
+from .networks import QNet
 from ..action_space import ActionSpace, flatten
 from .controller import Controller
 
@@ -107,14 +107,14 @@ class DiscreteDeepQController(Controller):
         qnet = QNet(state_size     = self._state_size, 
                     history_length = self._history_length, 
                     num_actions    = self._num_actions,
-                    graph          = graph,
                     double_q       = double_q,
                     target_net     = target_net,
-                    dueling        = dueling)
+                    dueling        = dueling,
+                    arch           = arch)
 
         # TODO Figure these out!
         opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
-        self._qnet = qnet.build_graph(arch, opt)
+        self._qnet = qnet.build(optimizer=opt, graph = graph)
 
     def init(self, session, logger):
         super(DiscreteDeepQController, self).init(session, logger)

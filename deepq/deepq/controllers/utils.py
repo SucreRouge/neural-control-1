@@ -38,9 +38,9 @@ def update_from_scope(source_scope, target_scope, name, rate):
                     asgns.append(target.assign(newval))
         return tf.group(*asgns)
 
-def choose_from_array(source, indices):
+def choose_from_array(source, indices, name="choose_from_array"):
     """ returns [source[i, indices[i]] for i in 1:len(indices)] """
-    with tf.name_scope("choose_from_array"):
+    with tf.name_scope(name):
         num_samples = tf.shape(indices)[0]
         indices     = tf.transpose(tf.stack([tf.cast(tf.range(0, num_samples), indices.dtype), indices]))
         values      = tf.gather_nd(source, indices)

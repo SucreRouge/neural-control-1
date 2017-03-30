@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
-from .utils import *
+from ..utils import *
+from . import DiscreteQBuilder, NetworkBuilder
 
 class QNetGraph(object):
     def __init__(self, global_step):
@@ -60,76 +61,45 @@ class QNetGraph(object):
     def update_target(self, session):
         session.run(self._target_update)
 
-class QNet(object):
-    def __init__(self, state_size, history_length, num_actions, graph = None, 
+class QNet(NetworkBuilder):
+    def __init__(self, state_size, history_length, num_actions, arch, 
                  target_net = True, double_q=False, dueling=False):
-        if graph is None:
-            graph = tf.get_default_graph()
+        super(QNet, self).__init__(state_size = state_size, history_length = history_length, num_actions = num_actions)
 
-        self._state_size     = state_size
-        self._history_length = history_length
-        self._num_actions    = num_actions
-        self._graph          = graph
         self._double_q       = double_q
         self._use_target_net = target_net
         self._dueling_arch   = dueling
         self._summaries      = []
+        self._q_builder      = DiscreteQBuilder(state_size, history_length, num_actions, arch, dueling = dueling)
 
-    def build_graph(self, arch, optimizer):
-        with self._graph.as_default():
-            self._summaries = []
-            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
-            discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
-            self._qnet  = QNetGraph(gstep)
+    def _build(self, optimizer):
+        self._summaries = []
+        gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+        discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
+        self._qnet  = QNetGraph(gstep)
 
-            self._build_value_network(arch)
-            self._build_target_network(arch)
-            with tf.variable_scope("bellman_update"):
-                current_q, updated_q = self._build_bellman_update(discount, arch)
-
-            self._qnet  = self._build_training(optimizer)
-            self._qnet.set_summaries(tf.summary.merge(self._summaries))
-            self._summaries = []
-
-        return self._qnet
-
-    def _build_value_network(self, arch):
-        # build the value network
-        with tf.variable_scope("value_network") as value_net_scope:
-            value_input   = self._make_input()
-            value_actions = self._build_q_net(value_input, arch)
-            self._summaries.append(tf.summary.histogram("action_scores", value_actions))
-
-        self._qnet.set_value_network(input = value_input, output = value_actions, scope = value_net_scope)
-
-    def _build_target_network(self, arch):
-        """ This function builds the target network that is used to generate the Q values for the
-            next state in the bellman update.
-            It propagates the next state through the network architecture. If '_use_target_net'
-            is set to False, is reuses the weights of the value network.
-        """
-        assert self._qnet._value_scope is not None, "Cannot build target network when value network does not exist"
-        # the target net
-        if self._use_target_net:
-            with tf.variable_scope("target_network") as target_scope:
-                state = self._make_input()
-                qvals = self._build_q_net(state, arch)
-                self._summaries.append(tf.summary.histogram("action_scores", qvals))
-        else:
-            with tf.name_scope("target_network"):
-                with tf.variable_scope(self._qnet._value_scope, reuse=True):
-                    state = self._make_input()
-                    qvals = self._build_q_net(state, arch)
-            self._summaries.append(tf.summary.histogram("action_scores", qvals))
+        n = self._q_builder.build(var_scope='value_network', name_scope='value_network')
+        self._qnet.set_value_network(input = n.state, output = n.q_values, scope = n.scope)
+        target_vars = 'target_network' if self._use_target_net else 'value_network'
+        n = self._q_builder.build(var_scope=target_vars, name_scope='target_network', reuse=not self._use_target_net)
 
         if self._use_target_net:
-            update_target = assign_from_scope(self._qnet._value_scope, target_scope, name="update_target_network")
+            update_target = assign_from_scope(self._qnet._value_scope, target_vars, name="update_target_network")
         else:
             update_target = tf.no_op()
 
-        self._qnet.set_target_network(input = state, output = qvals, update = update_target)
+        self._qnet.set_target_network(input = n.state, output = n.q_values, update = update_target)
 
-    def _build_bellman_update(self, discount, arch):
+        with tf.variable_scope("bellman_update"):
+            current_q, updated_q = self._build_bellman_update(discount)
+
+        self._qnet  = self._build_training(optimizer)
+        self._qnet.set_summaries(tf.summary.merge(self._summaries))
+        self._summaries = []
+
+        return self._qnet
+
+    def _build_bellman_update(self, discount):
         reward   = tf.placeholder(tf.float32, [None], name="reward")
         chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
         terminal = tf.placeholder(tf.bool,    [None], name="terminal")
@@ -142,19 +112,19 @@ class QNet(object):
 
         # TODO debug to check that this does what i think it does
         # target vaues
-        with tf.name_scope("future_reward"):
+        with tf.name_scope("future_return"):
             if self._double_q:
-                with tf.name_scope("double_q"):
-                    with tf.variable_scope(self._qnet._value_scope, reuse=True):
-                        proposed_actions = self._build_q_net(target_input, arch)
+                with tf.name_scope("best_action") as nscope:
+                    pb = self._q_builder.build(var_scope=self._qnet._value_scope, name_scope=nscope, reuse=True)
+                    proposed_actions = pb.q_values
                     best_action = tf.argmax(proposed_actions, axis=1, name="best_action")
-                best_future_q = choose_from_array(target_actions, best_action)
+                best_future_q = choose_from_array(target_actions, best_action, name="best_future_Q")
             else:
                 best_future_q = tf.reduce_max(target_actions, axis=1, name="best_future_Q")                
-            future_rwd = best_future_q * (1.0 - tf.to_float(terminal))
+            future_return = best_future_q * (1.0 - tf.to_float(terminal))
 
         with tf.name_scope("updated_Q"):
-            target_q = discount * future_rwd + reward
+            target_q = discount * future_return + reward
 
         # current values
         with tf.name_scope("current_Q"):
@@ -189,27 +159,3 @@ class QNet(object):
         
         self._qnet.set_training_ops(loss = loss, train = train)
         return self._qnet
-
-
-    def _make_input(self, name="state"):
-        return tf.placeholder(tf.float32, [None, self._history_length, self._state_size], name=name)
-
-
-    def _build_q_net(self, input, arch):
-        history_length = input.get_shape()[1].value
-        state_size     = input.get_shape()[2].value
-        num_actions    = self._num_actions
-        features = arch(input)
-        if self._dueling_arch:
-            return self._make_dueling_arch(features, num_actions)
-        else:
-            actions  = tf.layers.dense(features, num_actions, name="qvalues")
-            return actions
-
-    def _make_dueling_arch(self, features, num_actions):
-        action_vals = tf.layers.dense(features, num_actions, name="action_values")
-        state_vals  = tf.layers.dense(features, 1, name="state_values")
-        with tf.name_scope("q_values"):
-            q_vals = state_vals + action_vals - tf.reduce_mean(action_vals, axis=1, keep_dims=True)
-        return q_vals  
-
