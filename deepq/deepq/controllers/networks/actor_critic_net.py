@@ -61,7 +61,7 @@ class ActorCriticBuilder(NetworkBuilder):
         self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, state_features, action_features, full_features)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, state_features)
 
-    def _build(self, optimizer, inputs=None):
+    def _build(self, actor_optimizer, critic_optimizer, inputs=None):
         gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
         discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
 
@@ -108,13 +108,13 @@ class ActorCriticBuilder(NetworkBuilder):
                      target_scope = target_scope, inputs = inputs)
         self._net.set_bellman(b)
 
-        self._build_training(optimizer, v, p, b.updated_q)
+        self._build_training(actor_optimizer, critic_optimizer, v, p, b.updated_q)
         self._summaries += b.summaries
         self._net._summaries = tf.summary.merge(self._summaries)
 
         return self._net
 
-    def _build_training(self, optimizer, critic, policy, target_q):
+    def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q):
         current_q = critic.q_value
         with tf.variable_scope("training"):
             with tf.name_scope("num_samples"):
@@ -122,6 +122,7 @@ class ActorCriticBuilder(NetworkBuilder):
             with tf.name_scope("scale"):
                 scale = 1.0/tf.to_float(num_samples)
             loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
+            
             # error clipping
             with tf.name_scope("clipped_error_gradient"):
                 bound = 5*scale
@@ -129,28 +130,21 @@ class ActorCriticBuilder(NetworkBuilder):
 
             # get all further gradients
             tvars = tf.trainable_variables()
-            tgrads = tf.gradients(current_q, tvars, q_error, "critic_gradients")
-            def add_w_none(t):
-                a, b = t
-                if b is not None:
-                    b = -b * scale
-                if a is None:
-                    return b 
-                elif b is None:
-                    return a
-                return a + b
+            cgrads = tf.gradients(current_q, tvars, q_error, "critic_gradients")
+            ctrain = critic_optimizer.apply_gradients(zip(cgrads, tvars), global_step=self._net._global_step, name="CriticOptimizer")
 
              # Policy Gradient update of policy
             with tf.name_scope("policy_gradient"):
-                grad_a = tf.gradients(critic.q_value, [critic.action], name="dQ_da")
-                pgrads = tf.gradients(policy.action, tf.trainable_variables(), grad_a)
+                grad_a = tf.gradients(critic.q_value, [critic.action], name="dQ_da")[0]
+                # not the minus here: we want to increase the expected return, so we do gradient ascent!
+                pgrads = tf.gradients(policy.action, tf.trainable_variables(), -grad_a, name="policy_gradient")
 
-            with tf.variable_scope("combined_gradients"):
-                grads = map(add_w_none, zip(tgrads, pgrads))
-                grads_and_vars = zip(grads, tvars)
+            atrain = actor_optimizer.apply_gradients(zip(pgrads, tvars), name="PolicyOptimizer")
+
+            train = tf.group(ctrain, atrain, name="train_step")
 
             with tf.name_scope("summary"):
                 self._summaries.append(tf.summary.scalar("loss", loss))
-            train = optimizer.apply_gradients(grads_and_vars, global_step=self._net._global_step)
+            
         
         self._net.set_training_ops(loss = loss, train = train)

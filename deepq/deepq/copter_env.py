@@ -39,7 +39,7 @@ class CopterEnv(gym.Env):
     }
 
     def __init__(self):
-        high = np.array([np.inf]*6)
+        high = np.array([np.inf]*9)
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
@@ -93,6 +93,9 @@ class CopterEnv(gym.Env):
         if self.np_random.rand() < 0.01:
             self.copterstatus.angular_velocity += self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
 
+        if self.np_random.rand() < 0.01:
+            self.copterstatus.target += self.np_random.uniform(low=-3, high=3, size=(3,)) * math.pi / 180
+
         return self._get_state(), reward, done, {}
 
     def _calc_acceleration(self, control):
@@ -140,8 +143,9 @@ class CopterEnv(gym.Env):
     def _reset(self):
         self.copterstatus = CopterStatus()
         # start in resting position, but with low angular velocity
-        self.copterstatus.attitude = self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self.copterstatus.angular_velocity = self.np_random.uniform(low=-0.1, high=0.1, size=(3,))
+        self.target = self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
+        self.copterstatus.attitude = self.target + self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self._steps = 0
 
         self.steps_beyond_done = None
@@ -150,7 +154,7 @@ class CopterEnv(gym.Env):
     def _get_state(self):
         s = self.copterstatus
         # currently, we ignore position and velocity!
-        return np.concatenate([s.attitude, s.angular_velocity])
+        return np.concatenate([s.attitude, s.angular_velocity, self.target])
 
     def _render(self, mode='human', close=False):
         # currently not implemented

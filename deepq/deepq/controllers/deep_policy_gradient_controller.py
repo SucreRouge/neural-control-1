@@ -96,7 +96,7 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, state_features, action_features, full_features, graph = None, target_net=True, learning_rate=1e-4):
+    def setup_graph(self, state_features, action_features, full_features, graph = None, target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self._history_length, 
                     num_actions     = self._num_actions,
@@ -106,5 +106,6 @@ class DeepPolicyGradientController(Controller):
                     full_features   = full_features)
 
         # TODO Figure these out!
-        opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
-        self._qnet = qnet.build(optimizer=opt, graph = graph)
+        aopt = tf.train.RMSPropOptimizer(learning_rate=actor_learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
+        copt = tf.train.RMSPropOptimizer(learning_rate=critic_learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
+        self._qnet = qnet.build(actor_optimizer=aopt, critic_optimizer=copt, graph = graph)
