@@ -50,13 +50,14 @@ class ActorCriticNet(object):
 
 class ActorCriticBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, state_features, full_features, 
-                 target_critic = True, target_policy = True):
+                 target_critic = True, target_policy = True, soft_target_update=1e-4):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
 
-        self._use_target_critic = target_critic
-        self._use_target_policy = target_policy
+        self._use_target_critic  = target_critic
+        self._use_target_policy  = target_policy
+        self._soft_target_update = soft_target_update
 
         self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, state_features, full_features)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, state_features)
@@ -64,6 +65,8 @@ class ActorCriticBuilder(NetworkBuilder):
     def _build(self, optimizer, inputs=None):
         gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
         discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
+        if self._soft_target_update:
+            tau = tf.Variable(self._soft_target_update, dtype = tf.float32, trainable=False, name="tau")
 
         self._net = ActorCriticNet(gstep)
 
@@ -76,23 +79,27 @@ class ActorCriticBuilder(NetworkBuilder):
         state  = self.make_state_input()
         action = self.make_action_input()
         v = self._critic_builder.build(name_scope="critic", var_scope="critic", inputs={"state": state, "action": action})
-        #self._qnet.set_value_network(input  = v.state, output = v.q_values, scope = v.scope)
         self._summaries += v.summaries
         if self._use_target_critic:
             target_scope = copy_variables_to_scope(v.scope, "target_vars")
             with tf.name_scope(target_scope.name+"/"):
-                update_critic = assign_from_scope(v.scope, target_scope, "update_critic")
+                if self._soft_target_update:
+                    update_critic = update_from_scope(v.scope, target_scope, tau, "update_critic")
+                else:
+                    update_critic = assign_from_scope(v.scope, target_scope, "update_critic")
         else:
             target_scope = v.scope 
             update_critic = tf.no_op(name="update_critic")
 
         p = self._policy_builder.build(name_scope="policy", var_scope="policy", inputs={"state": state})
         self._net.set_policy(p)
-        #self._summaries += v.summaries
         if self._use_target_policy:
             target_scope = copy_variables_to_scope(p.scope, "target_vars")
             with tf.name_scope(target_scope.name+"/"):
-                update_policy = assign_from_scope(p.scope, target_scope, "update_policy")
+                if self._soft_target_update:
+                    update_policy = update_from_scope(v.scope, target_scope, tau, "update_policy")
+                else:
+                    update_policy = assign_from_scope(p.scope, target_scope, "update_policy")
         else:
             target_scope = p.scope 
             update_policy = tf.no_op(name="update_policy")

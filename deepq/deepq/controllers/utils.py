@@ -22,7 +22,7 @@ def assign_from_scope(source_scope, target_scope, name=None):
                     asgns.append(target.assign(source))
         return tf.group(*asgns)
 
-def update_from_scope(source_scope, target_scope, name, rate):
+def update_from_scope(source_scope, target_scope, rate, name="soft_update"):
     if isinstance(source_scope, tf.VariableScope):
         source_scope = source_scope.name
     if isinstance(target_scope, tf.VariableScope):
