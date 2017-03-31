@@ -31,12 +31,13 @@ class ContinuousQNetwork(object):
 
 
 class ContinuousQBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, state_features, full_features):
+    def __init__(self, state_size, history_length, num_actions, state_features, action_features, full_features):
         super(ContinuousQBuilder, self).__init__(state_size     = state_size, 
                                                history_length = history_length,
                                                num_actions    = num_actions)
-        self._state_features = state_features
-        self._full_features  = full_features
+        self._state_features  = state_features
+        self._action_features = action_features
+        self._full_features   = full_features
 
     def _build(self, inputs):
         state = inputs.get("state", None)
@@ -49,7 +50,9 @@ class ContinuousQBuilder(NetworkBuilder):
 
         with tf.variable_scope("state_features"):
             state_features = self._state_features(state)
-        full_data = tf.concat([state_features, action], axis=1)
+        with tf.variable_scope("action_features"):
+            action_features = self._action_features(action)  
+        full_data = tf.concat([state_features, action_features], axis=1)
         full_features  = self._full_features(full_data)
 
         q_value = tf.layers.dense(full_features, 1, name="q_value", bias_initializer=tf.constant_initializer(-6))

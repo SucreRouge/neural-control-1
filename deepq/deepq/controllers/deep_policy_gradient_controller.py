@@ -5,9 +5,29 @@ from .memory import History, Memory
 import tensorflow as tf
 import numpy as np
 
+class EGreedy(object):
+    def __init__(self, start_eps, end_eps, num_steps):
+        self._start_epsilon = start_eps
+        self._end_epsilon   = end_eps
+        self._num_steps     = num_steps
+        self.epsilon = start_eps
+
+    def set_stepcount(self, steps):
+        decay = min(1, float(steps) / self._num_steps)
+        dist  = self._start_epsilon - self._end_epsilon
+        self.epsilon = self._start_epsilon - decay * dist
+
+    def __call__(self, actions, test=False):
+        if not test and np.random.rand() < self.epsilon:
+            a = np.random.rand(*actions.shape) * 2 - 1
+            return a
+        else:
+            return actions
+
 class DeepPolicyGradientController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
-                    steps_per_epoch=10000, minibatch_size=64):
+                    steps_per_epoch=10000, minibatch_size=64, final_exploration_frame=1000000,
+                    final_epsilon=0.1):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
         super(DeepPolicyGradientController, self).__init__(action_space)
@@ -18,6 +38,7 @@ class DeepPolicyGradientController(Controller):
         self._steps_per_epoch = steps_per_epoch
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
+        self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
 
         self._history         = History(duration=history_length, state_size=state_size)
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size,
@@ -51,10 +72,10 @@ class DeepPolicyGradientController(Controller):
     def _get_action(self, test=False):
         full_state    = self._history.state
         action_vals   = self._qnet.get_actions(full_state, self.session)
-        action        = action_vals + 0.1*(np.random.rand(*action_vals.shape) - 0.5)#self._policy(action_vals, test)
+        action        = self._policy(action_vals, test)
         action        = np.clip(action, -1, 1)
-        #if not test:
-        #    self._policy.set_stepcount(self.frame_count)
+        if not test:
+            self._policy.set_stepcount(self.frame_count)
         
         return action, action_vals
 
@@ -75,13 +96,14 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, state_features, full_features, graph = None, target_net=True, learning_rate=1e-4):
+    def setup_graph(self, state_features, action_features, full_features, graph = None, target_net=True, learning_rate=1e-4):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
-                    history_length = self._history_length, 
-                    num_actions    = self._num_actions,
-                    target_critic  = target_net,
-                    state_features = state_features,
-                    full_features  = full_features)
+                    history_length  = self._history_length, 
+                    num_actions     = self._num_actions,
+                    target_critic   = target_net,
+                    state_features  = state_features,
+                    action_features = action_features,
+                    full_features   = full_features)
 
         # TODO Figure these out!
         opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)

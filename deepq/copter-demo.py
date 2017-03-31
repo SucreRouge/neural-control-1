@@ -47,7 +47,7 @@ def test_callback():
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
         epoch   = controller._epoch_counter
-        epsilon = 0#controller._policy.epsilon
+        epsilon = controller._policy.epsilon
         acount  = controller.frame_count
         test_counter = len(reward_hist)
 
@@ -93,11 +93,13 @@ use_cont   = True
 if use_cont:
     controller = DeepPolicyGradientController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=32)
+              minibatch_size=32, final_exploration_frame=5e5)
     def ff(input):
         return tf.layers.dense(input, 256, activation=tf.nn.relu, name="full_features")
+    def af(input):
+        return tf.layers.dense(input, 256, activation=tf.nn.relu, name="action_features")
 
-    controller.setup_graph(arch, ff, target_net=True, learning_rate=2.5e-4)
+    controller.setup_graph(arch, af, ff, target_net=True, learning_rate=2.5e-4)
 elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),

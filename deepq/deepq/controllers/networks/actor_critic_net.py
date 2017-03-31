@@ -49,7 +49,7 @@ class ActorCriticNet(object):
         return session.run([self._policy.action], feed_dict={self._policy.state:state})[0][0]
 
 class ActorCriticBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, state_features, full_features, 
+    def __init__(self, state_size, history_length, num_actions, state_features, action_features, full_features, 
                  target_critic = True, target_policy = True):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
@@ -58,7 +58,7 @@ class ActorCriticBuilder(NetworkBuilder):
         self._use_target_critic = target_critic
         self._use_target_policy = target_policy
 
-        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, state_features, full_features)
+        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, state_features, action_features, full_features)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, state_features)
 
     def _build(self, optimizer, inputs=None):
@@ -124,7 +124,7 @@ class ActorCriticBuilder(NetworkBuilder):
             loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
             # error clipping
             with tf.name_scope("clipped_error_gradient"):
-                bound = scale
+                bound = 5*scale
                 q_error = tf.clip_by_value(tf.gradients(loss, [current_q])[0], -bound, bound)
 
             # get all further gradients
