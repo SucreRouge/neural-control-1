@@ -1,8 +1,7 @@
 import tensorflow as tf
 
 def current_name_scope():
-    with tf.name_scope("") as scope:
-        return scope
+    return tf.get_default_graph()._name_stack + "/"
 
 # tf helper functions
 def assign_from_scope(source_scope, target_scope, name=None):
@@ -50,3 +49,18 @@ def choose_from_array(source, indices, name="choose_from_array"):
         values      = tf.gather_nd(source, indices)
     return values
 
+def copy_variables_to_scope(source_scope, target_scope):
+    if isinstance(source_scope, tf.VariableScope):
+        source_scope = source_scope.name
+
+    sources = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope=source_scope)
+
+    with tf.variable_scope(target_scope, reuse=False) as tscope:
+        with tf.name_scope(tscope.name+"/"):
+            for var in sources:
+                source_name = var.name[len(source_scope):]
+                if source_name.startswith("/"):
+                    source_name = source_name[1:]
+                source_name = source_name.split(":")[0]
+                newvar = tf.get_variable(name = source_name, initializer = var.initialized_value())
+    return tscope

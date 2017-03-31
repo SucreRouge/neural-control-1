@@ -52,9 +52,11 @@ class ContinuousQBuilder(NetworkBuilder):
         full_data = tf.concat([state_features, action], axis=1)
         full_features  = self._full_features(full_data)
 
-        q_value = tf.layers.dense(full_features, 1, name="q_value")
+        q_value = tf.layers.dense(full_features, 1, name="q_value", bias_initializer=tf.constant_initializer(-6))
         
-        self._summaries.append(tf.summary.histogram("q_value", q_value))
+        with tf.name_scope("summary"):
+            self._summaries.append(tf.summary.histogram("q_histogram", q_value))
+            self._summaries.append(tf.summary.scalar("mean_q", tf.reduce_mean(q_value)))
         scope = tf.get_variable_scope()
 
         return ContinuousQNetwork(state   = state,   action = action, 

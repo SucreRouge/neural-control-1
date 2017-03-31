@@ -38,6 +38,8 @@ class GenericActionSpace(object):
         # TODO tuple is not so trivial...
         if isinstance(space, spaces.Discrete):
             self._num_actions = space.n
+        elif isinstance(space, spaces.Box):
+            self._num_actions = space.shape
 
     @property
     def is_discrete(self):

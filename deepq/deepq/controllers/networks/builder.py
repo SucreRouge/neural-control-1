@@ -47,19 +47,11 @@ class NetworkBuilder(object):
                 if name_scope is not None:
                     with tf.name_scope(name_scope):
                         net = self._build(inputs = inputs, **kwargs)
+                elif var_scope.name != "":
+                    with tf.name_scope(var_scope.name + "/"):
+                        net = self._build(inputs = inputs, **kwargs)
                 else:
                     net = self._build(inputs = inputs, **kwargs)
             self._summaries = None
             return net
-
-    def build_with_target(self, graph = None, scope = None, share=False, inputs = None, target_inputs = None, **kwargs):
-        kwargs['graph'] = graph
-        value  = self.build(name_scope = scope, var_scope = scope, reuse = False, inputs = inputs, **kwargs)
-        tvsc   = scope if share else scope + '_target'  
-        target = self.build(name_scope = scope+'_target', var_scope = tvsc, reuse=share, inputs = target_inputs, **kwargs)
-        if share:
-            with tf.name_scope(scope+'_target'):
-                update = tf.no_op()
-        else:
-            update = assign_from_scope(scope, tvsc, name=scope+"_update")
-        return value, target, update
+    

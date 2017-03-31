@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from ..utils import *
-from . import DiscreteQBuilder, NetworkBuilder
+from . import DiscreteQBuilder, NetworkBuilder, DiscreteBellmanBuilder
 
 class QNetGraph(object):
     def __init__(self, global_step):
@@ -16,20 +16,15 @@ class QNetGraph(object):
         self._value_out   = output
         self._value_scope = scope
 
-    def set_target_network(self, input, output, update):
-        self._target_in     = input
-        self._target_out    = output
+    def set_update(self, update):
         self._target_update = update
 
-    def set_bellman_ops(self, current, chosen, reward, next, terminal, current_q,
-                        target_q):
-        self._bellman_current  = current
-        self._bellman_chosen   = chosen
-        self._bellman_reward   = reward
-        self._bellman_next     = next
-        self._bellman_terminal = terminal
-        self._bellman_currentQ = current_q
-        self._bellman_targetQ  = target_q
+    def set_bellman_ops(self, bnet):
+        self._bellman_chosen   = bnet.action
+        self._bellman_reward   = bnet.reward
+        self._bellman_next     = bnet.state
+        self._bellman_terminal = bnet.terminal
+        self._bellman_targetQ  = bnet.updated_q
 
     def set_training_ops(self, loss, train):
         self._train_loss     = loss
@@ -42,7 +37,7 @@ class QNetGraph(object):
 
     def _train_feed(self, qs):
         actions = np.reshape(qs.action, (len(qs.action),))
-        feed = {self._bellman_current:  qs.current,
+        feed = {self._value_in:        qs.current,
                 self._bellman_next:     qs.next,
                 self._bellman_chosen:   actions,
                 self._bellman_reward:   qs.reward,
@@ -74,70 +69,51 @@ class QNet(NetworkBuilder):
     def _build(self, optimizer, inputs=None):
         gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
         discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
+        chosen   = tf.placeholder(tf.int32,[None], name="action")
+        
+        # grouping these so the graph visualization looks nicer
+        with tf.name_scope("transition"):
+            reward   = tf.placeholder(tf.float32, [None], name="reward")
+            terminal = tf.placeholder(tf.bool,    [None], name="terminal")
+            nstate  = self.make_state_input(name="next_state")
+
         self._qnet  = QNetGraph(gstep)
 
         state = self.make_state_input()
-        inputs = {"state": state}
+        v = self._q_builder.build(name_scope="qnet", var_scope="qnet", inputs={"state": state})
+        self._qnet.set_value_network(input  = v.state, output = v.q_values, scope = v.scope)
+        self._summaries += v.summaries
 
-        nstate  = self.make_state_input(name="next_state")
-        tinputs = {"state": nstate}
+        if self._use_target_net:
+            target_scope = copy_variables_to_scope(v.scope, "target_vars")
+            with tf.name_scope(target_scope.name+"/"):
+                update = assign_from_scope(v.scope, target_scope, "update")
+        else:
+            target_scope = v.scope 
+            update = tf.no_op(name="update")
+        self._qnet.set_update(update)
 
-        v, t, u = self._q_builder.build_with_target(scope = 'qnet',  share = not self._use_target_net, 
-                                                    inputs = inputs, target_inputs = tinputs)
-        self._qnet.set_value_network(input  = v.state, output = v.q_values, scope  = v.scope)
-        self._qnet.set_target_network(input = t.state, output = t.q_values, update = u)
+        bb = DiscreteBellmanBuilder(history_length = self.history_length, state_size = self.state_size, 
+                                    num_actions = self.num_actions, double_q = self._double_q)
+        inputs = {"discount": discount, "reward": reward, "terminal": terminal, "action": chosen,
+                  "next_state": nstate, "state": state}
+        b = bb.build(qbuilder = self._q_builder, value_scope = v.scope, 
+                     target_scope = target_scope, inputs = inputs)
+        self._summaries += b.summaries
+        self._qnet.set_bellman_ops(b)
 
-        with tf.variable_scope("bellman_update"):
-            current_q, updated_q = self._build_bellman_update(discount)
+        with tf.name_scope("current_Q"):
+            current_q     = choose_from_array(v.q_values, chosen)
+            self._summaries.append(tf.summary.scalar("mean_Q", tf.reduce_mean(current_q)))
 
-        self._qnet  = self._build_training(optimizer)
+        self._build_training(optimizer, current_q, b.updated_q)
         self._qnet.set_summaries(tf.summary.merge(self._summaries))
         self._summaries = []
 
         return self._qnet
 
-    def _build_bellman_update(self, discount):
-        reward   = tf.placeholder(tf.float32, [None], name="reward")
-        chosen   = tf.placeholder(tf.int32,   [None], name="chosen")
-        terminal = tf.placeholder(tf.bool,    [None], name="terminal")
 
-        target_input   = self._qnet._target_in
-        value_input    = self._qnet._value_in
-        target_actions = self._qnet._target_out
-        value_actions  = self._qnet._value_out
-
-
-        # TODO debug to check that this does what i think it does
-        # target vaues
-        with tf.name_scope("future_return"):
-            if self._double_q:
-                with tf.name_scope("best_action") as nscope:
-                    pb = self._q_builder.build(var_scope=self._qnet._value_scope, name_scope=nscope, reuse=True)
-                    proposed_actions = pb.q_values
-                    best_action = tf.argmax(proposed_actions, axis=1, name="best_action")
-                future_q = choose_from_array(target_actions, best_action, name="future_Q")
-            else:
-                future_q = tf.reduce_max(target_actions, axis=1, name="future_Q")                
-            future_return = best_future_q * (1.0 - tf.to_float(terminal))
-
-        with tf.name_scope("updated_Q"):
-            target_q = discount * future_return + reward
-
-        # current values
-        with tf.name_scope("current_Q"):
-            current_q     = choose_from_array(value_actions, chosen)
-            self._summaries.append(tf.summary.scalar("mean_Q", tf.reduce_mean(current_q)))
-
-        self._qnet.set_bellman_ops(current  = value_input, next   = target_input, 
-                                   chosen   = chosen,      reward = reward,
-                                   terminal = terminal,    current_q = current_q,
-                                   target_q = target_q)
-
-        return current_q, target_q
-
-    def _build_training(self, optimizer):
-        current_q = self._qnet._bellman_currentQ
-        target_q  = self._qnet._bellman_targetQ
+    def _build_training(self, optimizer, current_q, target_q):
         with tf.variable_scope("training"):
             num_samples = tf.shape(current_q)[0]
             loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')

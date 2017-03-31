@@ -47,7 +47,7 @@ def test_callback():
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
         epoch   = controller._epoch_counter
-        epsilon = controller._policy.epsilon
+        epsilon = 0#controller._policy.epsilon
         acount  = controller.frame_count
         test_counter = len(reward_hist)
 
@@ -87,9 +87,18 @@ def arch(inp):
 
 task = CopterEnv()
 use_single = False
+use_cont   = True
 
 # single controller
-if use_single:
+if use_cont:
+    controller = DeepPolicyGradientController(history_length=10, memory_size=1e6, 
+              state_size=task.observation_space.shape[0], action_space=task.action_space,
+              minibatch_size=32)
+    def ff(input):
+        return tf.layers.dense(input, 256, activation=tf.nn.relu, name="full_features")
+
+    controller.setup_graph(arch, ff, target_net=True, learning_rate=2.5e-4)
+elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),
               final_exploration_frame=2e5, minibatch_size=32)
@@ -107,6 +116,36 @@ else:
 
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
+
+def show_graph(graph_def, max_const_size=32):
+    import IPython.display as idisplay
+    from IPython.display import clear_output, Image, display, HTML
+    
+    """Visualize TensorFlow graph."""
+    if hasattr(graph_def, 'as_graph_def'):
+        graph_def = graph_def.as_graph_def()
+    code = """
+        <script>
+          function load() {{
+            document.getElementById("{id}").pbtxt = {data};
+          }}
+        </script>
+        <link rel="import" href="https://tensorboard.appspot.com/tf-graph-basic.build.html" onload=load()>
+        <div style="height:800px">
+          <tf-graph-basic id="{id}"></tf-graph-basic>
+        </div>
+    """.format(data=repr(str(graph_def)), id='graph'+str(np.random.rand()))
+  
+    iframe = """
+        <iframe seamless style="width:100%;height:100%;border:0" srcdoc="{}"></iframe>
+    """.format(code.replace('"', '&quot;'))
+    f = open("test.html", "w")
+    f.write(HTML(iframe).data)
+    f.close()
+
+    display(HTML(iframe))
+
+show_graph(tf.get_default_graph())
 
 run(task=task, controller=controller, num_frames=1e7, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())

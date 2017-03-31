@@ -115,9 +115,3 @@ class DiscreteDeepQController(Controller):
         # TODO Figure these out!
         opt = tf.train.RMSPropOptimizer(learning_rate=learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
         self._qnet = qnet.build(optimizer=opt, graph = graph)
-
-    def init(self, session, logger):
-        super(DiscreteDeepQController, self).init(session, logger)
-
-        self._session.run([tf.global_variables_initializer()])
-        self._qnet.update_target(self._session)

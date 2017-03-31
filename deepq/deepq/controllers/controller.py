@@ -48,3 +48,5 @@ class Controller(object):
 
         self._session        = session
         self._summary_writer = logger
+        # this might be a bit wasteful! I don't know.
+        self._session.run([tf.global_variables_initializer()])
