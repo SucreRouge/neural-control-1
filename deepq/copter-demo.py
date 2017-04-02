@@ -99,7 +99,8 @@ if use_cont:
     def af(input):
         return tf.layers.dense(input, 256, activation=tf.nn.relu, name="action_features")
 
-    controller.setup_graph(arch, af, ff, target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-3)
+    controller.setup_graph(arch, af, ff, target_net=True, actor_learning_rate=1e-4, 
+                            critic_learning_rate=1e-3, soft_target=1e-3)
 elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),

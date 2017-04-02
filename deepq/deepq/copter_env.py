@@ -94,7 +94,7 @@ class CopterEnv(gym.Env):
             self.copterstatus.angular_velocity += self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
 
         if self.np_random.rand() < 0.01:
-            self.copterstatus.target += self.np_random.uniform(low=-3, high=3, size=(3,)) * math.pi / 180
+            self.target += self.np_random.uniform(low=-3, high=3, size=(3,)) * math.pi / 180
 
         return self._get_state(), reward, done, {}
 

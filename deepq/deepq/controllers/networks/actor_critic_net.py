@@ -148,7 +148,11 @@ class ActorCriticBuilder(NetworkBuilder):
 
             atrain = actor_optimizer.apply_gradients(zip(pgrads, tvars), name="PolicyOptimizer")
 
-            train = tf.group(ctrain, atrain, name="train_step")
+            if self._soft_target_update:
+                train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
+            else:
+                train = tf.group(ctrain, atrain, name="train_step")
+
 
             with tf.name_scope("summary"):
                 self._summaries.append(tf.summary.scalar("loss", loss))

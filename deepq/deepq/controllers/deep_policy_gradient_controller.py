@@ -89,21 +89,28 @@ class DeepPolicyGradientController(Controller):
         ls = self._qnet.train_step(sample, self._session, summary_writer)
         self._step_counter += 1
         if self._step_counter > self._steps_per_epoch:
-            # copy target net to policy net
-            self._qnet.update_target(self._session)
+            # copy target net to policy net if we do hard target updates
+            if not self._soft_target_update:
+                self._qnet.update_target(self._session)
             self._step_counter = 0
             self._epoch_counter += 1
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, state_features, action_features, full_features, graph = None, target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4):
+    def setup_graph(self, state_features, action_features, full_features, graph = None, 
+                          target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
+                          soft_target=False):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self._history_length, 
                     num_actions     = self._num_actions,
                     target_critic   = target_net,
+                    target_policy   = target_net,
+                    soft_target_update = soft_target,
                     state_features  = state_features,
                     action_features = action_features,
                     full_features   = full_features)
+
+        self._soft_target_update = soft_target
 
         # TODO Figure these out!
         aopt = tf.train.RMSPropOptimizer(learning_rate=actor_learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
