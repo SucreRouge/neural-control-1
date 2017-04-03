@@ -81,7 +81,7 @@ class CopterEnv(gym.Env):
 
         reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
-            merr = np.mean(np.abs(quad.attitude)) # this is guaranteed to be smaller than err
+            merr = np.mean(np.abs(quad.attitude - self.target)) # this is guaranteed to be smaller than err
             rerr = merr / self.threshold
             reward += 1.1 - rerr
 
