@@ -92,7 +92,8 @@ class ControlRun(object):
         # start a new test task here
         self.reset_task()
         result, track = self.run_episode(test=True, record=True, onstep=self._on_test_step)
-        self._on_test(result, track)
+        if self._on_test is not None:
+            self._on_test(result, track)
         self.reset_task()
 
 def run(controller, task, num_frames, test_every, episode_callback=None, test_callback=None, 
