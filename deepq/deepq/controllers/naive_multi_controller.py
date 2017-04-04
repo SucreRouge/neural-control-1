@@ -5,14 +5,18 @@ class FakePolicy:
         self.epsilon = 1.0
 
 class NaiveMultiController(Controller):
-    def __init__(self, sub_controllers, action_space):
-        super(NaiveMultiController, self).__init__(action_space)
+    def __init__(self, sub_controllers, action_space, state_size):
+        super(NaiveMultiController, self).__init__(action_space, state_size)
 
         self._sub_controllers = sub_controllers
         self._epoch_counter   = 0
         self._policy = FakePolicy()
 
-    def _observe(self, state, reward, test=False):
+    def observe(self, state, reward, test=False):
+        # call super
+        super(NaiveMultiController, self).observe(state=state, reward=reward, test=test)
+        
+        # and relay raw data to sub-controllers
         for ctrl in self._sub_controllers:
             ctrl.observe(state, reward, test)
 

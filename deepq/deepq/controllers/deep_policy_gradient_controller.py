@@ -30,17 +30,13 @@ class DeepPolicyGradientController(Controller):
                     final_epsilon=0.1):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
-        super(DeepPolicyGradientController, self).__init__(action_space)
+        super(DeepPolicyGradientController, self).__init__(action_space, state_size, history_length)
 
         self._num_actions     = action_space.num_actions[0]
-        self._state_size      = state_size
-        self._history_length  = history_length
         self._steps_per_epoch = steps_per_epoch
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
         self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
-
-        self._history         = History(duration=history_length, state_size=state_size)
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size,
                                        action_dim = self._num_actions, action_type = float)
 
@@ -48,30 +44,18 @@ class DeepPolicyGradientController(Controller):
         self._step_counter    = 0
         self._epoch_counter   = 0
 
-    def _observe(self, state, reward, test=False):
+    def _observe(self, state, last, reward, action, test=False):
         # if this is the first state, there is no transition to remember,
         # so simply add to the state history
-        if self._last_action is None:
-            self._history.observe(state)
+        if action is None:
             return
 
-        terminal = state is None
-        last_state = self._history.state
-        action = self._last_action
-        if not terminal:
-            next_state = self._history.observe(state)
-        else:
-            next_state = None
-            self._last_action = None
-            self._history.clear()
-        
         # if not in test mode, remember the transition
         if not test:
-            self._state_memory.append(state=last_state, next=next_state, reward=reward, action=action)
+            self._state_memory.append(state=last, next=state, reward=reward, action=action)
 
     def _get_action(self, test=False):
-        full_state    = self._history.state
-        action_vals   = self._qnet.get_actions(full_state, self.session)
+        action_vals   = self._qnet.get_actions(self.full_state, self.session)
         action        = self._policy(action_vals, test)
         action        = np.clip(action, -1, 1)
         if not test:
@@ -101,7 +85,7 @@ class DeepPolicyGradientController(Controller):
                           target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
                           soft_target=False):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
-                    history_length  = self._history_length, 
+                    history_length  = self.history_length, 
                     num_actions     = self._num_actions,
                     target_critic   = target_net,
                     target_policy   = target_net,
@@ -113,6 +97,6 @@ class DeepPolicyGradientController(Controller):
         self._soft_target_update = soft_target
 
         # TODO Figure these out!
-        aopt = tf.train.RMSPropOptimizer(learning_rate=actor_learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
-        copt = tf.train.RMSPropOptimizer(learning_rate=critic_learning_rate, decay=0.99, epsilon=0.01, momentum=0.95)
+        aopt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
+        copt = tf.train.AdamOptimizer(learning_rate=critic_learning_rate)
         self._qnet = qnet.build(actor_optimizer=aopt, critic_optimizer=copt, graph = graph)
