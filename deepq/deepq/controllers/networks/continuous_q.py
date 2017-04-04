@@ -31,13 +31,11 @@ class ContinuousQNetwork(object):
 
 
 class ContinuousQBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, state_features, action_features, full_features):
+    def __init__(self, state_size, history_length, num_actions, features):
         super(ContinuousQBuilder, self).__init__(state_size     = state_size, 
-                                               history_length = history_length,
-                                               num_actions    = num_actions)
-        self._state_features  = state_features
-        self._action_features = action_features
-        self._full_features   = full_features
+                                                 history_length = history_length,
+                                                 num_actions    = num_actions)
+        self._features  = features
 
     def _build(self, inputs):
         state = inputs.get("state", None)
@@ -48,14 +46,8 @@ class ContinuousQBuilder(NetworkBuilder):
         if action is None:
             action = self.make_action_input("action")
 
-        with tf.variable_scope("state_features"):
-            state_features = self._state_features(state)
-        with tf.variable_scope("action_features"):
-            action_features = self._action_features(action)  
-        full_data = tf.concat([state_features, action_features], axis=1)
-        full_features  = self._full_features(full_data)
-
-        q_value = tf.layers.dense(full_features, 1, name="q_value", bias_initializer=tf.constant_initializer(-6))
+        features = self._features(state, action)
+        q_value  = tf.layers.dense(features, 1, name="q_value")
         
         with tf.name_scope("summary"):
             self._summaries.append(tf.summary.histogram("q_histogram", q_value))

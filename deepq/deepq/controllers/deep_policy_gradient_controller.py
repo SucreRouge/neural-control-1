@@ -18,9 +18,9 @@ class EGreedy(object):
         self.epsilon = self._start_epsilon - decay * dist
 
     def __call__(self, actions, test=False):
-        if not test and np.random.rand() < self.epsilon:
+        if not test:
             a = np.random.rand(*actions.shape) * 2 - 1
-            return a
+            return actions + a * self.epsilon
         else:
             return actions
 
@@ -64,7 +64,7 @@ class DeepPolicyGradientController(Controller):
         return action, action_vals
 
     def train(self):
-        if len(self._state_memory) < 10000:
+        if len(self._state_memory) < self._minibatch_size:
             return
 
         summary_writer = self._summary_writer if self._step_counter % 100 == 0 else None
@@ -81,7 +81,7 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, state_features, action_features, full_features, graph = None, 
+    def setup_graph(self, actor_net, critic_net, graph = None, 
                           target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
                           soft_target=False):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
@@ -90,9 +90,8 @@ class DeepPolicyGradientController(Controller):
                     target_critic   = target_net,
                     target_policy   = target_net,
                     soft_target_update = soft_target,
-                    state_features  = state_features,
-                    action_features = action_features,
-                    full_features   = full_features)
+                    critic_net      = critic_net,
+                    policy_net      = actor_net)
 
         self._soft_target_update = soft_target
 
