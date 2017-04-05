@@ -1,6 +1,6 @@
 from .networks import ActorCriticBuilder
 from .controller import Controller
-from ..action_space import ActionSpace
+from ..action_space import ActionSpace, rescale
 from .memory import History, Memory
 import tensorflow as tf
 import numpy as np
@@ -30,6 +30,8 @@ class DeepPolicyGradientController(Controller):
                     final_epsilon=0.1):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
+        o = np.ones(action_space.num_actions)
+        action_space = rescale(action_space, -o, o)
         super(DeepPolicyGradientController, self).__init__(action_space, state_size, history_length)
 
         self._num_actions     = action_space.num_actions[0]
