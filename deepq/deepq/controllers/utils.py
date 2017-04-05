@@ -34,11 +34,13 @@ def update_from_scope(source_scope, target_scope, rate, name="soft_update"):
     with tf.name_scope(name):
         for source in source_vars:
             for target in target_vars:
-                source_name = source.name[len(source_scope):]
-                target_name = target.name[len(target_scope):]
+                source_name = source.name[len(source_scope)+1:]
+                target_name = target.name[len(target_scope)+1:]
                 if source_name == target_name:
-                    newval = (1 - rate) * target + rate * source 
-                    asgns.append(target.assign(newval))
+                    sn = source_name.split(":")[0]
+                    with tf.name_scope(sn):
+                        newval = (1 - rate) * target + rate * source
+                        asgns.append(target.assign(newval))
         return tf.group(*asgns)
 
 def choose_from_array(source, indices, name="choose_from_array"):
