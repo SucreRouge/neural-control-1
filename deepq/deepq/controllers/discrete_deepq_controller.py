@@ -88,12 +88,11 @@ class DiscreteDeepQController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, arch, graph = None, target_net=True, double_q=False, dueling=False, learning_rate=1e-4):
+    def setup_graph(self, arch, graph = None, double_q=False, dueling=False, learning_rate=1e-4):
         qnet = QNet(state_size     = self._state_size, 
                     history_length = self.history_length, 
                     num_actions    = self._num_actions,
                     double_q       = double_q,
-                    target_net     = target_net,
                     dueling        = dueling,
                     arch           = arch)
 

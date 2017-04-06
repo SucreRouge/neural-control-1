@@ -58,11 +58,10 @@ class QNetGraph(object):
 
 class QNet(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, arch, 
-                 target_net = True, double_q=False, dueling=False):
+                    double_q=False, dueling=False):
         super(QNet, self).__init__(state_size = state_size, history_length = history_length, num_actions = num_actions)
 
         self._double_q       = double_q
-        self._use_target_net = target_net
         self._dueling_arch   = dueling
         self._q_builder      = DiscreteQBuilder(state_size, history_length, num_actions, arch, dueling = dueling)
 
@@ -84,13 +83,10 @@ class QNet(NetworkBuilder):
         self._qnet.set_value_network(input  = v.state, output = v.q_values, scope = v.scope)
         self._summaries += v.summaries
 
-        if self._use_target_net:
-            target_scope = copy_variables_to_scope(v.scope, "target_vars")
-            with tf.name_scope(target_scope.name+"/"):
-                update = assign_from_scope(v.scope, target_scope, "update")
-        else:
-            target_scope = v.scope 
-            update = tf.no_op(name="update")
+        target_scope = copy_variables_to_scope(v.scope, "target_vars")
+        with tf.name_scope(target_scope.name+"/"):
+            update = assign_from_scope(v.scope, target_scope, "update")
+                
         self._qnet.set_update(update)
 
         bb = DiscreteBellmanBuilder(history_length = self.history_length, state_size = self.state_size, 

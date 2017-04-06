@@ -83,14 +83,11 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, actor_net, critic_net, graph = None, 
-                          target_net=True, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
+    def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
                           soft_target=False):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self.history_length, 
                     num_actions     = self._num_actions,
-                    target_critic   = target_net,
-                    target_policy   = target_net,
                     soft_target_update = soft_target,
                     critic_net      = critic_net,
                     policy_net      = actor_net)
