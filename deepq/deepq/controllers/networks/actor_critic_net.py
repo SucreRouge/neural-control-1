@@ -6,7 +6,6 @@ from . import ContinuousQBuilder, NetworkBuilder, ContinuousPolicyBuilder, Conti
 class ActorCriticNet(object):
     def __init__(self, global_step):
         self._global_step = global_step
-        self._summaries   = tf.no_op()
 
     def set_policy(self, policy):
         self._policy = policy
@@ -67,11 +66,9 @@ class ActorCriticBuilder(NetworkBuilder):
 
         self._net = ActorCriticNet(gstep)
 
-        #with tf.name_scope("transition"):
-        if True:
-            reward   = tf.placeholder(tf.float32, [None], name="reward")
-            terminal = tf.placeholder(tf.bool,    [None], name="terminal")
-            nstate  = self.make_state_input(name="next_state")
+        reward   = tf.placeholder(tf.float32, [None], name="reward")
+        terminal = tf.placeholder(tf.bool,    [None], name="terminal")
+        nstate  = self.make_state_input(name="next_state")
 
         state  = self.make_state_input()
         action = self.make_action_input()
@@ -148,6 +145,6 @@ class ActorCriticBuilder(NetworkBuilder):
 
             with tf.name_scope("summary"):
                 self._summaries.append(tf.summary.scalar("loss", loss))
-            
+        
         
         self._net.set_training_ops(loss = loss, train = train)

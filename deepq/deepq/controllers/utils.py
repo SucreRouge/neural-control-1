@@ -51,7 +51,7 @@ def choose_from_array(source, indices, name="choose_from_array"):
         values      = tf.gather_nd(source, indices)
     return values
 
-def copy_variables_to_scope(source_scope, target_scope):
+def copy_variables_to_scope(source_scope, target_scope, trainable=None):
     if isinstance(source_scope, tf.VariableScope):
         source_scope = source_scope.name
 
@@ -64,5 +64,5 @@ def copy_variables_to_scope(source_scope, target_scope):
                 if source_name.startswith("/"):
                     source_name = source_name[1:]
                 source_name = source_name.split(":")[0]
-                newvar = tf.get_variable(name = source_name, initializer = var.initialized_value())
+                newvar = tf.get_variable(name = source_name, initializer = var.initialized_value(), trainable=trainable)
     return tscope

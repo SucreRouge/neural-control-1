@@ -50,7 +50,6 @@ class ContinuousQBuilder(NetworkBuilder):
         q_value  = tf.layers.dense(features, 1, name="q_value")
         
         with tf.name_scope("summary"):
-            self._summaries.append(tf.summary.histogram("q_histogram", q_value))
             self._summaries.append(tf.summary.scalar("mean_q", tf.reduce_mean(q_value)))
         scope = tf.get_variable_scope()
 
