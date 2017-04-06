@@ -99,9 +99,9 @@ class ActorCriticBuilder(NetworkBuilder):
         bb = ContinuousBellmanBuilder(history_length = self.history_length, state_size = self.state_size, 
                                     num_actions = self.num_actions)
         inputs = {"discount": discount, "reward": reward, "terminal": terminal, "action": action,
-                  "next_state": nstate, "next_action": p.action}
-        b = bb.build(qbuilder = self._critic_builder, value_scope = v.scope, 
-                     target_scope = target_scope, inputs = inputs)
+                  "next_state": nstate}
+        b = bb.build(qbuilder = self._critic_builder, pbuilder = self._policy_builder, 
+                     critic_target_scope = critic_target_scope, policy_target_scope=policy_target_scope, inputs = inputs)
         self._net.set_bellman(b)
 
         self._build_training(actor_optimizer, critic_optimizer, v, p, b.updated_q)

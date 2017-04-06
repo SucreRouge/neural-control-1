@@ -41,16 +41,20 @@ class ContinuousBellmanBuilder(NetworkBuilder):
                                                        history_length = history_length,
                                                        num_actions    = num_actions)
 
-    def _build(self, inputs, qbuilder, value_scope, target_scope):
+    def _build(self, inputs, qbuilder, pbuilder, critic_target_scope, policy_target_scope):
         discount = inputs['discount']
         reward   = inputs['reward']
         chosen   = inputs['action']
         terminal = inputs['terminal']
         next_state = inputs['next_state']
-        next_action = inputs['next_action']
+
+        with tf.name_scope("future_action"):
+            next_action = pbuilder.build(var_scope = policy_target_scope, name_scope = current_name_scope(), 
+                                     reuse=True, inputs={"state": next_state})
+            next_action = next_action.action
 
         with tf.name_scope("future_return"):
-            next_q = qbuilder.build(var_scope = target_scope, name_scope = current_name_scope(), 
+            next_q = qbuilder.build(var_scope = critic_target_scope, name_scope = current_name_scope(), 
                                      reuse=True, inputs={"state": next_state, "action": next_action})
             self._summaries += next_q.summaries
             future_return = next_q.q_value * (1.0 - tf.to_float(terminal))
