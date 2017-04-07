@@ -38,6 +38,8 @@ class GenericActionSpace(object):
         # TODO tuple is not so trivial...
         if isinstance(space, spaces.Discrete):
             self._num_actions = space.n
+        elif isinstance(space, spaces.Box):
+            self._num_actions = space.shape
 
     @property
     def is_discrete(self):
@@ -159,3 +161,30 @@ def _flatten(space):
         return dspace, convert
 
     raise TypeError("Cannot flatten %r"%type(space))
+
+
+# rescale a continuous action space
+def rescale(space, low, high):
+    if is_discrete(space):
+        raise TypeError("Cannot rescale discrete spaces")
+
+    if isinstance(space, GenericActionSpace):
+        ds, cv = _rescale(space._space, low, high)
+        return WrappedActionSpace(ds, space, cv)
+
+    ds, cv = _rescale(space, low, high)
+    return WrappedActionSpace(ds, GenericActionSpace(space), cv)
+
+def _rescale(space, high, low):
+    if not isinstance(space, spaces.Box):
+        raise TypeError("Cannot rescale non-Box spaces")
+
+    lo = space.low
+    hi = space.high
+    rg = hi - lo
+    rs = high - low
+    sc = rg / rs
+    def convert(x):
+        y = (x - low) * sc # y is in [0, rg]
+        return y + space.low
+    return spaces.Box(low, high), convert

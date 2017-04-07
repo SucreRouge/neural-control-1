@@ -39,12 +39,13 @@ class CopterEnv(gym.Env):
     }
 
     def __init__(self):
-        high = np.array([np.inf]*6)
+        high = np.array([np.inf]*9)
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
         self.action_space = spaces.Box(-1, 1, (4,))
 
+        self.target = np.zeros(3)
         self.threshold    = 5 * math.pi / 180
         self.fail_threshold = 15 * math.pi / 180
 
@@ -73,20 +74,27 @@ class CopterEnv(gym.Env):
         quad.angular_velocity += aa * dt
 
         # TODO currently, target attitude is 0
-        err = np.max(np.abs(quad.attitude))
+        err = np.max(np.abs(quad.attitude - self.target))
 
         self._steps += 1
         done = bool(self._steps > 500)
 
         reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
-            merr = np.mean(np.abs(quad.attitude)) # this is guaranteed to be smaller than err
+            merr = np.mean(np.abs(quad.attitude - self.target)) # this is guaranteed to be smaller than err
             rerr = merr / self.threshold
             reward += 1.1 - rerr
 
         if err > self.fail_threshold:
             reward = -10
             done = True
+
+        # random disturbances
+        if self.np_random.rand() < 0.01:
+            self.copterstatus.angular_velocity += self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
+
+        if self.np_random.rand() < 0.01:
+            self.target += self.np_random.uniform(low=-3, high=3, size=(3,)) * math.pi / 180
 
         return self._get_state(), reward, done, {}
 
@@ -136,6 +144,8 @@ class CopterEnv(gym.Env):
         self.copterstatus = CopterStatus()
         # start in resting position, but with low angular velocity
         self.copterstatus.angular_velocity = self.np_random.uniform(low=-0.1, high=0.1, size=(3,))
+        self.target = self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
+        self.copterstatus.attitude = self.target + self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self._steps = 0
 
         self.steps_beyond_done = None
@@ -144,7 +154,7 @@ class CopterEnv(gym.Env):
     def _get_state(self):
         s = self.copterstatus
         # currently, we ignore position and velocity!
-        return np.concatenate([s.attitude, s.angular_velocity])
+        return np.concatenate([s.attitude, s.angular_velocity, self.target])
 
     def _render(self, mode='human', close=False):
         # currently not implemented

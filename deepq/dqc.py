@@ -59,7 +59,7 @@ def test_callback():
         q_hist.append(result.mean_q)
         epoch   = controller._epoch_counter
         epsilon = controller._policy.epsilon
-        acount  = controller._action_counter
+        acount  = controller.frame_count
         test_counter = len(reward_hist)
 
         # plot the test run
