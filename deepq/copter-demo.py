@@ -56,14 +56,11 @@ def test_callback():
         ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
         ax.set_autoscaley_on(False)
         ax.set_ylim([-25, 25])
-        """
-        ax.plot(track[:, 4])               # y
-        ax.plot(track[:, 5])               # c
-        ax.plot(track[:, 3])               # x
-        """
+
         ax.plot(track[:, 6] * 180/math.pi)              # y
         ax.plot(track[:, 7] * 180/math.pi)              # c
-        ax.plot(track[:, 8] * 180/math.pi)              # x
+        ax.plot(track[:, 12] * 180/math.pi)              # x
+        ax.plot(track[:, 13] * 180/math.pi)              # x
         fig.savefig("tests/test_%d.pdf"%test_counter)
         plt.close(fig)
 
@@ -91,15 +88,27 @@ use_cont   = True
 
 # single controller
 if use_cont:
-    controller = DeepPolicyGradientController(history_length=10, memory_size=1e6, 
+    controller = DeepPolicyGradientController(history_length=2, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=32, final_exploration_frame=5e5)
-    def ff(input):
-        return tf.layers.dense(input, 256, activation=tf.nn.relu, name="full_features")
-    def af(input):
-        return tf.layers.dense(input, 256, activation=tf.nn.relu, name="action_features")
+              minibatch_size=64, final_exploration_frame=.5e6)
 
-    controller.setup_graph(arch, af, ff, target_net=True, actor_learning_rate=1e-4, 
+    def actor(state):
+        s = [d.value for d in state.get_shape()]
+        flat = tf.reshape(state, [-1, s[1]*s[2]])
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc1")
+        return tf.layers.dense(flat, 300, activation=tf.nn.relu, name="fc2")
+
+    def critic(state, action):
+        s = [d.value for d in state.get_shape()]
+        flat = tf.reshape(state, [-1, s[1]*s[2]])
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc1")
+        state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, name="state_features")
+        action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, name="action_features")
+        features = tf.add(state_features, action_features, name="features")
+        return features
+
+
+    controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=1e-4, 
                             critic_learning_rate=1e-3, soft_target=1e-3)
 elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
