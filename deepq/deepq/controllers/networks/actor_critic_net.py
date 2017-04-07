@@ -104,20 +104,25 @@ class ActorCriticBuilder(NetworkBuilder):
                      critic_target_scope = critic_target_scope, policy_target_scope=policy_target_scope, inputs = inputs)
         self._net.set_bellman(b)
 
-        self._build_training(actor_optimizer, critic_optimizer, v, p, b.updated_q)
+        # calculate q value of actor
+        ae = self._critic_builder.build(name_scope="actor_evaluation", var_scope="critic", reuse=True, inputs={"state": state, "action": p.action})
+        # add an identity op to make the graph easier to look at
+        tf.identity(ae._q_value, name="Q_s_pa")
+
+        self._build_training(actor_optimizer, critic_optimizer, v, p, b.updated_q, ae)
         self._summaries += b.summaries
         self._net._summaries = tf.summary.merge(self._summaries)
 
         return self._net
 
-    def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q):
+    def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
         current_q = critic.q_value
         with tf.variable_scope("training"):
             with tf.name_scope("num_samples"):
-                num_samples = tf.shape(current_q)[0]
+                num_samples = tf.shape(target_q)[0]
             with tf.name_scope("scale"):
                 scale = 1.0/tf.to_float(num_samples)
-            loss    = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
+            loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
             
             # error clipping
             with tf.name_scope("clipped_error_gradient"):
@@ -129,11 +134,11 @@ class ActorCriticBuilder(NetworkBuilder):
             cgrads = tf.gradients(current_q, tvars, q_error, "critic_gradients")
             ctrain = critic_optimizer.apply_gradients(zip(cgrads, tvars), global_step=self._net._global_step, name="CriticOptimizer")
 
-             # Policy Gradient update of policy
+            # Policy Gradient update of policy
+            grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
             with tf.name_scope("policy_gradient"):
-                grad_a = tf.gradients(critic.q_value, [critic.action], name="dQ_da")[0]
-                # not the minus here: we want to increase the expected return, so we do gradient ascent!
-                pgrads = tf.gradients(policy.action, tf.trainable_variables(), -grad_a, name="policy_gradient")
+                # note the minus here: we want to increase the expected return, so we do gradient ascent!
+                pgrads = tf.gradients(policy.action, tvars, -grad_a, name="policy_gradient")
 
             atrain = actor_optimizer.apply_gradients(zip(pgrads, tvars), name="PolicyOptimizer")
 
