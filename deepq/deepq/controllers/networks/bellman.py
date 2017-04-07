@@ -57,10 +57,10 @@ class ContinuousBellmanBuilder(NetworkBuilder):
             next_q = qbuilder.build(var_scope = critic_target_scope, name_scope = current_name_scope(), 
                                      reuse=True, inputs={"state": next_state, "action": next_action})
             self._summaries += next_q.summaries
-            future_return = next_q.q_value * (1.0 - tf.to_float(terminal))
+            future_return = next_q.q_value * tf.reshape(1.0 - tf.to_float(terminal), shape=(-1, 1))
 
         with tf.name_scope("discounted_return"):
-            target_q = discount * future_return + reward
+            target_q = discount * future_return + tf.reshape(reward, shape=(-1, 1))
 
         return BellmanNet(updated_q = target_q, reward = reward, action = chosen, terminal = terminal, 
                           state = next_state, summaries = self._summaries)
@@ -93,10 +93,10 @@ class DiscreteBellmanBuilder(NetworkBuilder):
 
         with tf.name_scope("future_return"):
             future_q = self._get_future_q(qbuilder, value_scope, next_qs.q_values, state)
-            future_return = future_q * (1.0 - tf.to_float(terminal))
+            future_return = future_q * tf.reshape(1.0 - tf.to_float(terminal), shape=(-1, 1))
 
         with tf.name_scope("discounted_return"):
-            target_q = discount * future_return + reward
+            target_q = discount * future_return + tf.reshape(reward, shape=(-1, 1))
 
         return BellmanNet(updated_q = target_q, reward = reward, action = chosen, terminal = terminal, 
                           state = next_state, summaries = self._summaries)
