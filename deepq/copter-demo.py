@@ -90,21 +90,22 @@ use_cont   = True
 if use_cont:
     controller = DeepPolicyGradientController(history_length=2, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=.5e6)
+              minibatch_size=64, final_exploration_frame=1e6)
 
     def actor(state):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
-        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc1")
-        return tf.layers.dense(flat, 300, activation=tf.nn.relu, name="fc2")
+        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, name="fc1")
+        return tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
-        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc1")
-        state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, name="state_features")
-        action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, name="action_features")
+        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, name="fc1")
+        state_features = tf.layers.dense(flat, 500, activation=tf.nn.relu, name="state_features")
+        action_features = tf.layers.dense(action, 500, activation=tf.nn.relu, name="action_features")
         features = tf.add(state_features, action_features, name="features")
+        features = tf.layers.dense(features, 400, activation=tf.nn.relu, name="features2")
         return features
 
 

@@ -93,10 +93,10 @@ class DiscreteBellmanBuilder(NetworkBuilder):
 
         with tf.name_scope("future_return"):
             future_q = self._get_future_q(qbuilder, value_scope, next_qs.q_values, state)
-            future_return = future_q * tf.reshape(1.0 - tf.to_float(terminal), shape=(-1, 1))
+            future_return = future_q * (1.0 - tf.to_float(terminal))
 
         with tf.name_scope("discounted_return"):
-            target_q = discount * future_return + tf.reshape(reward, shape=(-1, 1))
+            target_q = discount * future_return + reward
 
         return BellmanNet(updated_q = target_q, reward = reward, action = chosen, terminal = terminal, 
                           state = next_state, summaries = self._summaries)

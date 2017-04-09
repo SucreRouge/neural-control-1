@@ -45,15 +45,11 @@ class CopterEnv(gym.Env):
         self.observation_space = spaces.Box(-high, high)
         self.action_space = spaces.Box(-1, 1, (4,))
 
-        self.target = np.zeros(3)
-        self.threshold    = 5 * math.pi / 180
+        self.target         = np.zeros(3)
+        self.threshold      =  5 * math.pi / 180
         self.fail_threshold = 15 * math.pi / 180
 
         self._seed()
-        self.viewer = None
-        self.state  = None
-
-        self.steps_beyond_done = None
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -65,19 +61,18 @@ class CopterEnv(gym.Env):
         control = np.array(action) * 0.05
         dt      = 0.1
 
-        ap, aa = self._calc_acceleration(control)
-        quad = self.copterstatus
+        ap, aa  = self._calc_acceleration(control)
+        quad    = self.copterstatus
         quad.position += quad.velocity * dt + 0.5 * ap * dt * dt
         quad.velocity += ap * dt
 
         quad.attitude += quad.angular_velocity * dt + 0.5 * aa * dt * dt
         quad.angular_velocity += aa * dt
 
-        # TODO currently, target attitude is 0
         err = np.max(np.abs(quad.attitude - self.target))
 
         self._steps += 1
-        done = bool(self._steps > 500)
+        done = bool(self._steps > 1000)
 
         reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
@@ -136,7 +131,7 @@ class CopterEnv(gym.Env):
 
         
         aroll  = (dpitch * dyaw * (I[1, 1] - I[2, 2]) + dpitch * Or * J + control[1] * l) / I[0, 0]
-        apitch = (droll  * dyaw * (I[2, 2] - I[0, 0]) + droll * Or * J + control[2] * l) / I[1, 1]
+        apitch = (droll  * dyaw * (I[2, 2] - I[0, 0]) + droll * Or * J  + control[2] * l) / I[1, 1]
         ayaw   = (droll  * dyaw * (I[0, 0] - I[1, 1]) + control[3] * l) / I[2, 2]
         return np.array([a0, a1, a2]), np.array([aroll, apitch, ayaw])
 
@@ -148,7 +143,6 @@ class CopterEnv(gym.Env):
         self.copterstatus.attitude = self.target + self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self._steps = 0
 
-        self.steps_beyond_done = None
         return self._get_state()
 
     def _get_state(self):
