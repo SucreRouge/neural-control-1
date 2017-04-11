@@ -43,6 +43,8 @@ class NetworkBuilder(object):
                 var_scope = tf.get_variable_scope()
 
             self._summaries = []
+            regularizers_before = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
             with tf.variable_scope(var_scope, reuse = reuse):
                 if name_scope is not None:
                     with tf.name_scope(name_scope):
@@ -53,5 +55,9 @@ class NetworkBuilder(object):
                 else:
                     net = self._build(inputs = inputs, **kwargs)
             self._summaries = None
+
+            regularizers_now = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+            new_regularizers = [reg for reg in regularizers_now if reg not in regularizers_before]
+            net._regularizers = new_regularizers
             return net
     

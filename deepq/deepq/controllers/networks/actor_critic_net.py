@@ -118,21 +118,22 @@ class ActorCriticBuilder(NetworkBuilder):
     def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
         current_q = critic.q_value
         with tf.variable_scope("training"):
-            with tf.name_scope("num_samples"):
-                num_samples = tf.shape(target_q)[0]
-            with tf.name_scope("scale"):
-                scale = 1.0/tf.to_float(num_samples)
+            # ensure target_q is never too far from current_q
+            with tf.name_scope("clipped_target"):
+                bound    = 1
+                distance = tf.clip_by_value(target_q - current_q, -bound, bound)
+                target_q = current_q + distance
+
             loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
-            
-            # error clipping
-            with tf.name_scope("clipped_error_gradient"):
-                bound = 5*scale
-                q_error = tf.clip_by_value(tf.gradients(loss, [current_q])[0], -bound, bound)
+
+            # regularization
+            with tf.name_scope("regularization_loss"):
+                reg_loss = tf.reduce_sum(critic._regularizers)
+            loss = loss + reg_loss
 
             # get all further gradients
             tvars = tf.trainable_variables()
-            cgrads = tf.gradients(current_q, tvars, q_error, "critic_gradients")
-            ctrain = critic_optimizer.apply_gradients(zip(cgrads, tvars), global_step=self._net._global_step, name="CriticOptimizer")
+            ctrain = critic_optimizer.minimize(loss, global_step=self._net._global_step, name="CriticOptimizer")
 
             # Policy Gradient update of policy
             grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
