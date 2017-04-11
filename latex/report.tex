@@ -140,7 +140,7 @@
     This gives an inhomogeneous ODE with constant coefficients 
     \begin{align}
         \ddot{\state} &= a \dot{\state} + b \state + P (\setpoint - \state) + D \left( \dot{\setpoint} - \dot{\state} \right)\\ \nonumber
-        &\eqqcolon 2\gamma  \dot{\state} - \beta \state + D \setpoint
+        &\eqqcolon 2\gamma  \dot{\state} - \beta \state + P \setpoint
     \end{align}
     We now want to find $P$ and $D$ such that the squared error between $\setpoint$ and $\state$ is minimal.
     Unfortunately, excluding the integrative term has the side effect of preventing the state to converge to the true target, so the error (integrated over all time) will become infinite and the error minimization will become meaningless. 
@@ -149,38 +149,36 @@
     Another approach is to postulate that the integrative term, if it were included in the model, would essentially converge to an almost constant value that is used exactly compensate the above mentioned deviation.
     Therefore, we will in the following set $b=0$ with the interpretation that this term has been canceled out by the integral contribution.
 
-    Let now $\omega=\sqrt{\beta-\gamma^2} = \sqrt{b - cp - \gamma^2}$ and  $\kappa_{1,2} = \gamma \pm i \omega$, then the solution for 
-    $\state(0) = 0$ and $\dot{\state}(0) = 0$ becomes
+    The solution of the equation above can be formulated in terms of $\lambda=\sqrt{\gamma^2-P}$. This is either real
+    (overdamped case) or imaginary (underdamped case), and we always assume that $\gamma<0$, i.e. that the system 
+    dynamics do not blow up. We can then write the solution as
     \begin{align}
-        \state(t) = \frac{c p \setpoint}{\beta} \left( e^{\gamma t} \cos(\omega t) - 1 \right).
+        \state(t) = A e^{(\gamma + \lambda) t} + B e^{(\gamma - \lambda) t} + \setpoint,   
     \end{align}
-    With this, we can derive the loss as 
+    where $A$ and $B$ are determined by $\state(0) = 0, \dot{\state(0)} = 0$ to
     \begin{align}
-        L &= \int_0^{\infty} \frac{1}{2}\left( \frac{c p \setpoint}{b - cp} \left(e^{\gamma t} \cos ( \omega t ) - \frac{b}{c p}\right) \right)^2 \dt.
+        A &= \frac{\gamma - \lambda}{2\lambda} \cdot \setpoint\\
+        B &= -\frac{\gamma + \lambda}{2\lambda} \cdot \setpoint.
     \end{align}
-    
-    This diverges for $b \neq 0$. As $t \rightarrow \infty$, the $\exp$ term causes the error to converge to $\frac{b}{c p}$. 
-    In a full PID controller, the I term would thus grow until this constant error has been compensated. 
-    Since we ignored this term in order to get the system to be in the form of a second order ODE, 
-    we also have to choose $b=0$ if we do not want $p \rightarrow \infty$ as the optimal solution.
 
-    Then $\loss$ simplifies to
+    With that we can write down loss
     \begin{align}
-        \loss = \int_0^{\infty} \frac{y^2}{2}\left(e^{t\gamma} \cos (\omega t ) \right)^2 \dt = -\frac{2 \gamma^2 + \omega^2}{4 \gamma (\gamma^2 + \omega^2)} \cdot \frac{y^2}{2}.
+        L &= \frac{1}{2} \int_0^{\infty} A^2 e^{2(\gamma + \lambda) t} + 2 A B e^{2\gamma t} + B^2 e^{2(\gamma - \lambda) t} \dt\\
+          &= \frac{A^2}{4(\gamma + \lambda)} + \frac{2 A B}{4\gamma} + \frac{B^2}{4(\gamma - \lambda)} \nonumber \\
+          &= \frac{A^2 (\gamma - \lambda) + B^2 (\gamma + \lambda)}{4(\gamma + \lambda)(\gamma - \lambda)} + \frac{A B}{2\gamma} \nonumber \\
+          &= \left( \frac{(\gamma - \lambda)^3 + (\gamma + \lambda)^3}{4(\gamma + \lambda)(\gamma - \lambda)} - 
+          \frac{(\gamma - \lambda) (\gamma + \lambda)}{2\gamma} \right) \frac{y^2}{4 \lambda^2}.
     \end{align}
-   As $\gamma$ is independent of $p$
+    Merging the two fractions simplifies the expression to
     \begin{align}
-        \pdiv{L}{p} = \pdiv{L}{\omega} \cdot \pdiv{\omega}{p} = \frac{\gamma \cdot \setpoint^2}{2 (\gamma^2 + \omega^2)^2},
+        L &= \frac{y^2}{8 \gamma} \cdot \left( \frac{5 \gamma^2 - \lambda^2}{\gamma^2 - \lambda^2}\right)\\
+          &= \frac{y^2}{8 \gamma} \cdot \left( \frac{4 \gamma^2}{P} + 1\right)
     \end{align}
-    as 
-    \begin{align}
-         \pdiv{L}{\omega} = \frac{\gamma \omega}{2 (\gamma^2 + \omega^2)^2} \cdot \frac{\setpoint^2}{2}, \qquad
-         \pdiv{\omega}{p} = \frac{2 c}{\omega}.
-    \end{align}
-    As we have chosen $\omega >0$ and consider a stable control system ($\gamma < 0$), this means that, 
-    independently of the current value of $p$, we get that $\partial_p L < 0$, 
-    which means that gradient descent will always make $p$ bigger. 
-    That means that learning to minimize $L$ cannot converge for finite $p$.
+    The value $\gamma$ does not depend on $P$, so the loss is 
+    monotonically decreasing in $P$, meaning that the optimal value is $P \rightarrow \infty$.
+
+    % Discussion here or later???
+
 
   \subsection{Local Loss Minimization}
     As the calculation above showed, trying to optimized the loss function eq. \eqref{eq:l2loss} globally can easily
