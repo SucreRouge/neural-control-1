@@ -139,20 +139,26 @@
     We will from now on assume a problem where the setpoint is fixed ($\setpoint(t) = \const$).
     This gives an inhomogeneous ODE with constant coefficients 
     \begin{align}
-        \ddot{\state} &= a \dot{\state} + b \state + c p (\setpoint - \state) + c d \left( \dot{\setpoint} - \dot{\state} \right)\\ \nonumber
-        &\eqqcolon 2\gamma  \dot{\state} - \beta \state + c p \setpoint
+        \ddot{\state} &= a \dot{\state} + b \state + P (\setpoint - \state) + D \left( \dot{\setpoint} - \dot{\state} \right)\\ \nonumber
+        &\eqqcolon 2\gamma  \dot{\state} - \beta \state + D \setpoint
     \end{align}
+    We now want to find $P$ and $D$ such that the squared error between $\setpoint$ and $\state$ is minimal.
+    Unfortunately, excluding the integrative term has the side effect of preventing the state to converge to the true target, so the error (integrated over all time) will become infinite and the error minimization will become meaningless. 
+    One could in principle still perform the optimization by driving the fixed point to be as close as possible to the target value, which would be realised by $P \rightarrow \infty$ which is undesired. 
+    
+    Another approach is to postulate that the integrative term, if it were included in the model, would essentially converge to an almost constant value that is used exactly compensate the above mentioned deviation.
+    Therefore, we will in the following set $b=0$ with the interpretation that this term has been canceled out by the integral contribution.
 
     Let now $\omega=\sqrt{\beta-\gamma^2} = \sqrt{b - cp - \gamma^2}$ and  $\kappa_{1,2} = \gamma \pm i \omega$, then the solution for 
     $\state(0) = 0$ and $\dot{\state}(0) = 0$ becomes
     \begin{align}
         \state(t) = \frac{c p \setpoint}{\beta} \left( e^{\gamma t} \cos(\omega t) - 1 \right).
     \end{align}
-
     With this, we can derive the loss as 
     \begin{align}
         L &= \int_0^{\infty} \frac{1}{2}\left( \frac{c p \setpoint}{b - cp} \left(e^{\gamma t} \cos ( \omega t ) - \frac{b}{c p}\right) \right)^2 \dt.
     \end{align}
+    
     This diverges for $b \neq 0$. As $t \rightarrow \infty$, the $\exp$ term causes the error to converge to $\frac{b}{c p}$. 
     In a full PID controller, the I term would thus grow until this constant error has been compensated. 
     Since we ignored this term in order to get the system to be in the form of a second order ODE, 
