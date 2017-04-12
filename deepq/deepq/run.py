@@ -91,7 +91,16 @@ class ControlRun(object):
     def test(self):
         # start a new test task here
         self.reset_task()
+        # a few runs just to test stuff
+        results = []
+        for i in range(10):
+            results += [self.run_episode(test=True, record=False)]
+            self.reset_task()
+        # exemplary test to generate track
         result, track = self.run_episode(test=True, record=True, onstep=self._on_test_step)
+        results += [result]
+        result = np.mean(results, axis=0)
+        result = run_result(*result)
         if self._on_test is not None:
             self._on_test(result, track)
         self.reset_task()
