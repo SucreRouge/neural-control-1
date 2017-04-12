@@ -37,7 +37,8 @@ class ContinuousPolicyBuilder(NetworkBuilder):
         if state is None:
             state = self.make_state_input("state")
         features = self._features(state)
-        action   = tf.layers.dense(features, self.num_actions, activation=tf.tanh, name="action")
+        reg      = tf.contrib.layers.l2_regularizer(1e-4)
+        action   = tf.layers.dense(features, self.num_actions, activation=tf.tanh, name="action", kernel_regularizer=reg)
         self._summaries += [tf.summary.histogram("action", action)]
         return PolicyNet(state = state, action = action, scope = tf.get_variable_scope(), summaries = self._summaries)
 

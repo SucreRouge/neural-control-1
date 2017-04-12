@@ -28,7 +28,7 @@ def episode_callback():
         expected_hist.append(result.expected_reward)
         frame_hist.append(frame)
         i = len(reward_hist)
-        if i % 100 == 0:
+        if i % 10 == 0:
             rwd_h = np.array(reward_hist)
             exp_h = np.array(expected_hist)
             frm_h = np.array(frame_hist)
@@ -95,8 +95,9 @@ if use_cont:
     def actor(state):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
-        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, name="fc1")
-        return tf.layers.dense(flat, 400, activation=tf.nn.relu, name="fc2")
+        reg = tf.contrib.layers.l2_regularizer(1e-4)
+        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        return tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
@@ -110,9 +111,13 @@ if use_cont:
         features = tf.layers.dense(features, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
         return features
 
+    # decaing learning rates
+    gstep     = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+    critic_lr = tf.train.exponential_decay(1e-3, gstep, 20000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(0.5e-4, gstep, 20000, 0.95, staircase=True)
 
-    controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=1e-4, 
-                            critic_learning_rate=1e-3, soft_target=1e-4)
+    controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
+                            critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep)
 elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),

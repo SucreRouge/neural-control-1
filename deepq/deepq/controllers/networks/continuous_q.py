@@ -47,7 +47,8 @@ class ContinuousQBuilder(NetworkBuilder):
             action = self.make_action_input("action")
 
         features = self._features(state, action)
-        q_value  = tf.layers.dense(features, 1, name="q_value")
+        reg      = tf.contrib.layers.l2_regularizer(1e-4)
+        q_value  = tf.layers.dense(features, 1, name="q_value", kernel_regularizer=reg)
         
         with tf.name_scope("summary"):
             self._summaries.append(tf.summary.scalar("mean_q", tf.reduce_mean(q_value)))
