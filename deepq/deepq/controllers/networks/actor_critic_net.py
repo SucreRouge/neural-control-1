@@ -58,8 +58,9 @@ class ActorCriticBuilder(NetworkBuilder):
         self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net)
 
-    def _build(self, actor_optimizer, critic_optimizer, inputs=None):
-        gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+    def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
+        if gstep is None:
+            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
         discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
         if self._soft_target_update:
             tau = tf.Variable(self._soft_target_update, dtype = tf.float32, trainable=False, name="tau")
@@ -128,8 +129,8 @@ class ActorCriticBuilder(NetworkBuilder):
 
             # regularization
             with tf.name_scope("regularization_loss"):
-                reg_loss = tf.reduce_sum(critic._regularizers)
-            loss = loss + reg_loss
+                critic_reg_loss = tf.reduce_sum(critic._regularizers)
+            loss = loss + critic_reg_loss
 
             # get all further gradients
             tvars = tf.trainable_variables()
@@ -141,7 +142,11 @@ class ActorCriticBuilder(NetworkBuilder):
                 # note the minus here: we want to increase the expected return, so we do gradient ascent!
                 pgrads = tf.gradients(policy.action, tvars, -grad_a, name="policy_gradient")
 
-            atrain = actor_optimizer.apply_gradients(zip(pgrads, tvars), name="PolicyOptimizer")
+            with tf.name_scope("regularizer_gradient"):
+                policy_reg_loss = tf.reduce_sum(policy._regularizers)
+                reggrads = tf.gradients(policy_reg_loss, tvars, name="reg_gradient")
+
+            atrain = actor_optimizer.apply_gradients(zip(map(_safe_add, zip(pgrads, reggrads)), tvars), name="PolicyOptimizer")
 
             if self._soft_target_update:
                 train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
@@ -151,6 +156,22 @@ class ActorCriticBuilder(NetworkBuilder):
 
             with tf.name_scope("summary"):
                 self._summaries.append(tf.summary.scalar("loss", loss))
+                self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
+                self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
+                self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
+                self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
         
         
         self._net.set_training_ops(loss = loss, train = train)
+
+def _safe_add(ts):
+    t1, t2 = ts
+    if t1 is not None:
+        if t2 is not None:
+            return t1 + t2
+        else:
+            return t1
+    elif t2 is not None:
+        return t2
+    else:
+        return None
