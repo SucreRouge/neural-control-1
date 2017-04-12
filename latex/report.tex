@@ -10,7 +10,7 @@
 \input{preamble}
 
 \begin{document}
-  \title{On the Problems of Using Gradient Descent to Optimize PID Gains}
+  \title{On the Problems of Using On-Line Gradient Descent to Optimize Adaptive PID Gains}
   \author{Erik Schultheis}
   \maketitle
 
@@ -39,7 +39,7 @@
     proposed that borrow ideas from neural networks \cite{cong_novel_2005,yu_applying_2006,shu_pid_2000}.
 
     While there exist different variations for neural PIDs in the literature, 
-    the basic idea remains the same: We consider the PID parameters $p, i, d$ as dynamical parameters 
+    the basic idea remains the same: We consider the PID parameters $P, I, D$ as dynamical parameters 
     (weights in the language of neural networks) and try to optimize them such that a 
     loss function $L$ is minimized. 
     The loss function is chosen to be the squared error loss 
@@ -71,7 +71,7 @@
         \ddot{\state} = a \dot{\state} + b \state + c \control. \label{eq:qe_of_motion_system}
     \end{align}
     The control term is calculated as for a PID controller according to equation \eqref{eq:control_equation}. 
-    We call $w = (p, i, d)$ the parameter or weight vector. 
+    We call $w = (P, I, D)$ the parameter or weight vector. 
     We will be switching between discrete and continuous time formulations, 
     where $\att{t}{k} \define k \cdot \Delta t$ and in general $\att{x}{k} \define x(\att{t}{k})$.
 
@@ -105,7 +105,8 @@
     \end{subfigure}
     \caption{Application of the PIDNN algorithm to the system \eqref{eq:qe_of_motion_system}, for a constant setpoint 
     and a setpoint following a rect function. For reference
-    the system development with a PID controller that has the same starting weights as the PIDNN is shown.}
+    the system development with a PID controller that has the same starting weights as the PIDNN is shown. While the PIDNN 
+    works seemingly well for the constant target, it exhibits diverging behaviour in the second case.}
     \label{fig:demo}
     \end{figure}
 
@@ -132,7 +133,7 @@
 
 
 
-  \subsection{Global Loss Minimization}
+  \subsection{Global Minimization of $L^2$ Loss}
     \label{sq:L2Loss}
     To investigate the objective that the loss function tries to optimize globally, we first derive the combined 
     equations of motion of \eqref{eq:qe_of_motion_system} and \eqref{eq:control_equation}.
@@ -172,18 +173,31 @@
     Merging the two fractions simplifies the expression to
     \begin{align}
         L &= \frac{y^2}{8 \gamma} \cdot \left( \frac{5 \gamma^2 - \lambda^2}{\gamma^2 - \lambda^2}\right)\\
-          &= \frac{y^2}{8 \gamma} \cdot \left( \frac{4 \gamma^2}{P} + 1\right)
+          &= \frac{y^2}{4 (a - D)} \cdot \left( \frac{(a - D)^2}{P} + 1\right)
     \end{align}
     The value $\gamma$ does not depend on $P$, so the loss is 
     monotonically decreasing in $P$, meaning that the optimal value is $P \rightarrow \infty$.
 
-    % Discussion here or later???
+    It is important to notice that this catastrophic behaviour is mostly a consequence of the 
+    extreme simple model which allows the controlled system to react arbitrarily fast. Any 
+    real physical system (or even simulation with discrete time step $\Delta t$) exhibits 
+    delays and nonlinearities that prevent $P \rightarrow \infty$ from being the optimal
+    solution.
+
+    The above calculation is meant to show that one needs to be careful when optimizing 
+    with respect to $L^2$ loss as this does not place any direct constraints on the 
+    velocities and forces within the system, so lowering the loss does not necessarily
+    guarantee a better performing system from an engineering standpoint.
+
+    On more abstract grounds, we can argue that the $L^2$ loss is problematic because of its symmetries. Let $\error(t)$ be
+    the error of a given system and $\loss[\error]$ be the $L^2$ loss functional. Defining 
+    $\error^\prime(t) = \sqrt{\lambda} \error(t/\lambda)$ givens $\loss[\error] = \loss[\error^\prime]$, but from an 
+    engineering point of view the system behaviour corresponding to $\error^\prime$ can be arbitrarily bad: The error
+    decay is sped up by a factor of $\lambda$, but the overshoot is also increased, albeit only by the square root. 
+
 
 
   \subsection{Local Loss Minimization}
-    As the calculation above showed, trying to optimized the loss function eq. \eqref{eq:l2loss} globally can easily
-    lead to an unstable system. Therefore, we now try a different approach:
-
     We assume that the optimal weights change continuously, and over a time scale that is 
     larger than time step of the discretized system. Then we can use the following approximation: The optimal weights 
     $\att{w^*}{k}$ at timestep $k$ are those that minimize the loss over the time interval $[\att{t}{k}, \att{t}{k+1}]$. 
@@ -191,10 +205,12 @@
     $\att{w}{k+1} \leftarrow \att{w^*}{k}$.
 
     We look at a discretized version of the plant. 
-    We assume that the control input acts as a force term $g(\control)$ in addition to the force produced 
+    We assume that the control input acts as a force term $g(\control, \state, \dot{\state})$, 
+    which is assumed to be a nondecreasing function of the control input $\control$,
+    in addition to the force produced 
     by the system $f(\state, \dot{\state}, t)$. This gives us 
     \begin{align}
-        \att{\state}{k+1} \approx \att{\state}{k} + \att{\dot{\state}}{k} \Delta t + 0.5 \cdot \Delta t^2 \left( g(\att{\control}{k}) + f(\att{\state}{k}, \att{\dot{\state}}{k}, t) \right)
+        \att{\state}{k+1} \approx \att{\state}{k} + \att{\dot{\state}}{k} \Delta t + 0.5 \cdot \Delta t^2 \left( g(\att{\control}{k}, \att{\state}{k}, \att{\dot{\state}}{k}) + f(\att{\state}{k}, \att{\dot{\state}}{k}, t) \right)
     \end{align}
     in second order Taylor expansion. The loss over the interval $[\att{t}{k}, \att{t}{k+1}]$ is approximately
     $\att{L}{k} = 0.5 \left( {\att{\error}{k}}^2 + {\att{\error}{k+1}}^2 \right)$. 
@@ -209,19 +225,30 @@
          &= -\att{\error}{k+1} \cdot \pdiv{\att{\state}{k+1}}{\att{\control}k} 
                                \cdot \pdiv{\att{\control}{k}}{\att{w_i}{k}} \label{eq:discrete_gradient} \\
                         &= -\att{\error}{k+1} \cdot \frac{\Delta t^2}{2} 
-                                              \cdot \pdiv{g(\att{v}{k})}{\att{\control}{k}} 
+                                              \cdot \pdiv{g(\att{\control}{k}, \att{\state}{k}, \att{\dot{\state}}{k})}{\att{\control}{k}} 
                                               \cdot \pdiv{\att{\control}{k}}{\att{w_i}{k}}.
     \end{align}
     We can rescale the loss by $0.5 \Delta t^2$, and the learning rate for gradient descent by the inverse. 
-    For the control parameter $p$ in case that $g = \mathrm{id}$ this gives then in particular
+    For the control parameter $P$ this gives then in particular
     \begin{align}
-        \pdiv{\att{L}{k}}{\att{p}{k}} = - \att{\error}{k} \cdot \att{\error}{k+1}. \label{eq:diverging_p_local}
+        \pdiv{\att{L}{k}}{\att{P}{k}} = - \att{\error}{k} \cdot \att{\error}{k+1} \cdot g^\prime. \label{eq:diverging_p_local}
     \end{align}
-    This value is negative except for cases when the sign of $\att{\error}{k}$ and $\att{\error}{k+1}$ is different, 
+    As $g^\prime \geq 0$ this value is negative except for cases when the sign of 
+    $\att{\error}{k}$ and $\att{\error}{k+1}$ is different, 
     i.e. the state $\state$ crosses the setpoint $\setpoint$ in the considered interval. 
     Especially in the limit $\Delta t \rightarrow 0$, this will never happen and gradient descent will 
-    always increase $p$. The argument does not change if we allow for generic $g$, as one of the premises when applying 
-    PID control is that $g$ not change its sign. We again get diverging behaviour.
+    always increase $P$.
+
+    As was the case for global $L^2$ loss minimization, the algorithm again tries to act as fast as possible. 
+    Since we are only working in a local approximation this may break global stability of the controlled
+    system.
+
+    The only way for the learning to stabilize is alternating $\att{\error}{k}$ which either means
+    that $\state$ has to oscillate extremely strongly or that $\error$ is already quite low and 
+    the control currently holds the system in the correct state. However, as soon as the setpoint 
+    changes faster that the system can follow while still staying stable, $P$ will increase until
+    either the system dynamics are fast enough to follow $\setpoint$ or the system loses its stability.
+
 
 
   \subsection{Difference Quotient}
@@ -323,12 +350,6 @@
     This shows that the local optimization of the L2 loss (which in itself is already questionable, as per 
     section \ref{sq:L2Loss}) does not provide a way to get a stable system.
 
-    On more abstract grounds, we can argue that the L2 loss is problematic because of its symmetries. Let $\error(t)$ be
-    the error of a given system and $\loss[\error]$ be the L2 loss functional. Defining 
-    $\error^\prime(t) = \sqrt{\lambda} \error(t/\lambda)$ givens $\loss[\error] = \loss[\error^\prime]$, but from an 
-    engineering point of view the system behaviour corresponding to $\error^\prime$ can be arbitrarily bad: The error
-    decay is sped up by a factor of lambda, but the overshoot is also increased, albeit only by the square root. 
-
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     %                       Lyapunov Argument
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -406,7 +427,7 @@
 
     \section{TODO}
     \begin{itemize}
-        \item A section about the Lyapunov stability argument found in some papers, and figure out why it is wrong.
+        \item A section about the Lyapunov stability argument found in some papers, and figure out why it is wrong/incomplete.
                 \cite{cong_novel_2005}
         \item Look at more complicated ideas to combine PIDs and NNs. \cite{andrasik_-line_2004,zribi_new_2015}
         \item Numerical experiment in more complicated setting (maybe inverted pendulum as a classical benchmark).
