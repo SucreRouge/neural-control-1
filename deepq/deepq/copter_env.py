@@ -46,7 +46,7 @@ class CopterEnv(gym.Env):
         self.action_space = spaces.Box(-1, 1, (4,))
 
         self.target         = np.zeros(3)
-        self.threshold      =  5 * math.pi / 180
+        self.threshold      =  2 * math.pi / 180
         self.fail_threshold = 15 * math.pi / 180
 
         self._seed()
@@ -74,11 +74,23 @@ class CopterEnv(gym.Env):
         self._steps += 1
         done = bool(self._steps > 1000)
 
+        # positive reward for not falling over
         reward = 0.2 * (1 - err / self.fail_threshold)
         if err < self.threshold:
             merr = np.mean(np.abs(quad.attitude - self.target)) # this is guaranteed to be smaller than err
             rerr = merr / self.threshold
             reward += 1.1 - rerr
+
+        # reward for keeping velocities low
+        velmag = np.mean(np.abs(quad.angular_velocity))
+        reward += max(0.0, 0.1 - velmag)
+
+        # reward for constant control
+        cchange = np.mean(np.abs(control - self._last_control))
+        reward += max(0, 0.1 - 2*cchange)
+
+        # normalize reward so that we can get at most 1.0 per step
+        reward /= 1.5
 
         if err > self.fail_threshold:
             reward = -10
@@ -91,6 +103,7 @@ class CopterEnv(gym.Env):
         if self.np_random.rand() < 0.01:
             self.target += self.np_random.uniform(low=-3, high=3, size=(3,)) * math.pi / 180
 
+        self._last_control = control
         return self._get_state(), reward, done, {}
 
     def _calc_acceleration(self, control):
@@ -142,6 +155,7 @@ class CopterEnv(gym.Env):
         self.target = self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
         self.copterstatus.attitude = self.target + self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self._steps = 0
+        self._last_control = np.zeros(4)
 
         return self._get_state()
 

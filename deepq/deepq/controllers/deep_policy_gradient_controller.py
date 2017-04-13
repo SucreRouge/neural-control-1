@@ -27,7 +27,7 @@ class EGreedy(object):
 class DeepPolicyGradientController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, minibatch_size=64, final_exploration_frame=1000000,
-                    final_epsilon=0.1):
+                    final_epsilon=0.1, warmup_time=10000):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
         o = np.ones(action_space.num_actions)
@@ -36,6 +36,7 @@ class DeepPolicyGradientController(Controller):
 
         self._num_actions     = action_space.num_actions[0]
         self._steps_per_epoch = steps_per_epoch
+        self._warmup_time     = warmup_time
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
         self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
@@ -66,7 +67,7 @@ class DeepPolicyGradientController(Controller):
         return action, action_vals
 
     def train(self):
-        if len(self._state_memory) < self._minibatch_size:
+        if len(self._state_memory) < self._warmup_time:
             return
 
         summary_writer = self._summary_writer if self._step_counter % 100 == 0 else None
@@ -78,13 +79,17 @@ class DeepPolicyGradientController(Controller):
             # copy target net to policy net if we do hard target updates
             if not self._soft_target_update:
                 self._qnet.update_target(self._session)
+            
+            smr, step = self.session.run([self._var_summaries, self._qnet._global_step])
+            self._summary_writer.add_summary(smr, step)
+
             self._step_counter = 0
             self._epoch_counter += 1
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate=1e-4, critic_learning_rate=1e-4, 
-                          soft_target=False):
+    def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate=1e-4, critic_learning_rate=1e-3, 
+                          soft_target=False, global_step = None):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self.history_length, 
                     num_actions     = self._num_actions,
@@ -97,4 +102,9 @@ class DeepPolicyGradientController(Controller):
         # TODO Figure these out!
         aopt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
         copt = tf.train.AdamOptimizer(learning_rate=critic_learning_rate)
-        self._qnet = qnet.build(actor_optimizer=aopt, critic_optimizer=copt, graph = graph)
+        self._qnet = qnet.build(actor_optimizer=aopt, critic_optimizer=copt, graph = graph, gstep=global_step)
+
+        # setup variable statistics
+        with tf.name_scope("weight_summaries"):
+            summaries = [tf.summary.histogram(var.name, var) for var in tf.trainable_variables()]
+            self._var_summaries = tf.summary.merge(summaries)

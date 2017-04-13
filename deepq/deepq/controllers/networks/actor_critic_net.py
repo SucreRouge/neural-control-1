@@ -58,8 +58,9 @@ class ActorCriticBuilder(NetworkBuilder):
         self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net)
 
-    def _build(self, actor_optimizer, critic_optimizer, inputs=None):
-        gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
+    def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
+        if gstep is None:
+            gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
         discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
         if self._soft_target_update:
             tau = tf.Variable(self._soft_target_update, dtype = tf.float32, trainable=False, name="tau")
@@ -118,21 +119,22 @@ class ActorCriticBuilder(NetworkBuilder):
     def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
         current_q = critic.q_value
         with tf.variable_scope("training"):
-            with tf.name_scope("num_samples"):
-                num_samples = tf.shape(target_q)[0]
-            with tf.name_scope("scale"):
-                scale = 1.0/tf.to_float(num_samples)
+            # ensure target_q is never too far from current_q
+            with tf.name_scope("clipped_target"):
+                bound    = 1
+                distance = tf.clip_by_value(target_q - current_q, -bound, bound)
+                target_q = current_q + distance
+
             loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
-            
-            # error clipping
-            with tf.name_scope("clipped_error_gradient"):
-                bound = 5*scale
-                q_error = tf.clip_by_value(tf.gradients(loss, [current_q])[0], -bound, bound)
+
+            # regularization
+            with tf.name_scope("regularization_loss"):
+                critic_reg_loss = tf.reduce_sum(critic._regularizers)
+            loss = loss + critic_reg_loss
 
             # get all further gradients
             tvars = tf.trainable_variables()
-            cgrads = tf.gradients(current_q, tvars, q_error, "critic_gradients")
-            ctrain = critic_optimizer.apply_gradients(zip(cgrads, tvars), global_step=self._net._global_step, name="CriticOptimizer")
+            ctrain = critic_optimizer.minimize(loss, global_step=self._net._global_step, name="CriticOptimizer")
 
             # Policy Gradient update of policy
             grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
@@ -140,7 +142,11 @@ class ActorCriticBuilder(NetworkBuilder):
                 # note the minus here: we want to increase the expected return, so we do gradient ascent!
                 pgrads = tf.gradients(policy.action, tvars, -grad_a, name="policy_gradient")
 
-            atrain = actor_optimizer.apply_gradients(zip(pgrads, tvars), name="PolicyOptimizer")
+            with tf.name_scope("regularizer_gradient"):
+                policy_reg_loss = tf.reduce_sum(policy._regularizers)
+                reggrads = tf.gradients(policy_reg_loss, tvars, name="reg_gradient")
+
+            atrain = actor_optimizer.apply_gradients(zip(map(_safe_add, zip(pgrads, reggrads)), tvars), name="PolicyOptimizer")
 
             if self._soft_target_update:
                 train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
@@ -150,6 +156,22 @@ class ActorCriticBuilder(NetworkBuilder):
 
             with tf.name_scope("summary"):
                 self._summaries.append(tf.summary.scalar("loss", loss))
+                self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
+                self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
+                self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
+                self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
         
         
         self._net.set_training_ops(loss = loss, train = train)
+
+def _safe_add(ts):
+    t1, t2 = ts
+    if t1 is not None:
+        if t2 is not None:
+            return t1 + t2
+        else:
+            return t1
+    elif t2 is not None:
+        return t2
+    else:
+        return None
