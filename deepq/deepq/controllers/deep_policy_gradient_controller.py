@@ -62,7 +62,7 @@ class DeepPolicyGradientController(Controller):
         action        = self._policy(action_vals, test)
         action        = np.clip(action, -1, 1)
         if not test:
-            self._policy.set_stepcount(self.frame_count)
+            self._policy.set_stepcount(max(0, self.frame_count - self._warmup_time))
         
         return action, action_vals
 

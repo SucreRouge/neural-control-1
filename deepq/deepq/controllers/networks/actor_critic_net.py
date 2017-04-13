@@ -118,7 +118,7 @@ class ActorCriticBuilder(NetworkBuilder):
 
     def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
         current_q = critic.q_value
-        with tf.variable_scope("training"):
+        with tf.variable_scope("critic_training"):
             # ensure target_q is never too far from current_q
             with tf.name_scope("clipped_target"):
                 bound    = 1
@@ -133,9 +133,10 @@ class ActorCriticBuilder(NetworkBuilder):
             loss = loss + critic_reg_loss
 
             # get all further gradients
-            tvars = tf.trainable_variables()
             ctrain = critic_optimizer.minimize(loss, global_step=self._net._global_step, name="CriticOptimizer")
 
+        with tf.variable_scope("policy_training"):
+            tvars = tf.trainable_variables()
             # Policy Gradient update of policy
             grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
             with tf.name_scope("policy_gradient"):
@@ -146,20 +147,29 @@ class ActorCriticBuilder(NetworkBuilder):
                 policy_reg_loss = tf.reduce_sum(policy._regularizers)
                 reggrads = tf.gradients(policy_reg_loss, tvars, name="reg_gradient")
 
-            atrain = actor_optimizer.apply_gradients(zip(map(_safe_add, zip(pgrads, reggrads)), tvars), name="PolicyOptimizer")
+            with tf.name_scope("combine_gradients"):
+                with tf.name_scope("batch_size"):
+                    batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
+                summed = list(map(_safe_add, zip(pgrads, reggrads)))
+                for i in range(len(summed)):
+                    if summed[i] is not None:
+                        summed[i] = summed[i] / batch_size
 
-            if self._soft_target_update:
-                train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
-            else:
-                train = tf.group(ctrain, atrain, name="train_step")
+
+            atrain = actor_optimizer.apply_gradients(zip(summed, tvars), name="PolicyOptimizer")
+
+        if self._soft_target_update:
+            train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
+        else:
+            train = tf.group(ctrain, atrain, name="train_step")
 
 
-            with tf.name_scope("summary"):
-                self._summaries.append(tf.summary.scalar("loss", loss))
-                self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
-                self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
-                self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
-                self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
+        with tf.name_scope("train_summary"):
+            self._summaries.append(tf.summary.scalar("loss", loss))
+            self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
+            self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
+            self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
+            self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
         
         
         self._net.set_training_ops(loss = loss, train = train)
