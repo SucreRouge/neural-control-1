@@ -39,7 +39,8 @@ class ContinuousPolicyBuilder(NetworkBuilder):
         features = self._features(state)
         action   = tf.layers.dense(features, self.num_actions, activation=tf.tanh, name="action")
         self._summaries += [tf.summary.histogram("action", action)]
-        return PolicyNet(state = state, action = action, scope = tf.get_variable_scope(), summaries = self._summaries)
+        return PolicyNet(state = state, action = action, scope = tf.get_variable_scope(), 
+                         summaries = self._summaries)
 
 class GreedyPolicyBuilder(NetworkBuilder):
     def __init__(self, q_builder):
@@ -52,4 +53,30 @@ class GreedyPolicyBuilder(NetworkBuilder):
         pb = self._q_builder.build(reuse=True, inputs = inputs)
         proposed_actions = pb.q_values
         best_action = tf.argmax(proposed_actions, axis=1, name="best_action")
-        return PolicyNet(action = best_action, state = pb.state, scope = tf.get_variable_scope(), summaries = self._summaries)
+        return PolicyNet(action = best_action, state = pb.state, scope = tf.get_variable_scope(), 
+                         summaries = self._summaries)
+
+class PIDPolicyBuilder(object):
+    def __init__(self, state_size, history_length, num_actions, input_matrices, output_matrices):
+        super(PIDPolicyBuilder, self).__init__(state_size     = state_size, 
+                                               history_length = history_length,
+                                               num_actions    = num_actions)
+        self._input_matrices = input_matrices
+        self._output_matrics = output_matrices
+    
+    def _build(self, inputs):
+        state = inputs.get("state", None)
+        if state is None:
+            state = self.make_state_input("state")
+
+        actions = []
+        for i in range(self.num_actions):
+            ipv    = tf.get_variable(name="input_matrix", init=self._input_matrices[i], trainable=False)
+            errors = tf.matmul(ipv, state)
+            opv    = tf.get_variable(name="coefficients", init=self._output_matrices[i], trainable=True)
+            action = tf.reduce_sum(tf.multiply(errors, opv), axis=1)
+            actions += [action]
+
+        actions = tf.stack(actions)
+        return PolicyNet(action = actions, state = state, scope = tf.get_variable_scope, 
+                         summaries = self._summaries)
