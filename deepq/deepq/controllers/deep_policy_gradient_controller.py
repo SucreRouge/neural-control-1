@@ -27,7 +27,7 @@ class EGreedy(object):
 class DeepPolicyGradientController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, minibatch_size=64, final_exploration_frame=1000000,
-                    final_epsilon=0.1, warmup_time=10000):
+                    final_epsilon=0.1, warmup_time=10000, discount=0.99):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
         o = np.ones(action_space.num_actions)
@@ -46,6 +46,7 @@ class DeepPolicyGradientController(Controller):
         # counters
         self._step_counter    = 0
         self._epoch_counter   = 0
+        self._discount        = discount
 
     def _observe(self, state, last, reward, action, test=False):
         # if this is the first state, there is no transition to remember,
@@ -95,7 +96,8 @@ class DeepPolicyGradientController(Controller):
                     num_actions     = self._num_actions,
                     soft_target_update = soft_target,
                     critic_net      = critic_net,
-                    policy_net      = actor_net)
+                    policy_net      = actor_net,
+                    discount        = self._discount)
 
         self._soft_target_update = soft_target
 
