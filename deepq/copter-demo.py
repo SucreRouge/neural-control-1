@@ -42,10 +42,12 @@ def test_callback():
     reward_hist   = deque()
     expected_hist = deque()
     q_hist        = deque()
+    fails         = deque()
     def call(result, track):
         reward_hist.append(result.total_reward)
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
+        fails.append(task._fail_count)
         epoch   = controller._epoch_counter
         epsilon = controller._policy.epsilon
         acount  = controller.frame_count
@@ -59,15 +61,18 @@ def test_callback():
 
         ax.plot(track[:, 6] * 180/math.pi)              # y
         ax.plot(track[:, 7] * 180/math.pi)              # c
+        ax.plot(track[:, 8] * 180/math.pi)              # c
         ax.plot(track[:, 12] * 180/math.pi)              # x
         ax.plot(track[:, 13] * 180/math.pi)              # x
+        ax.plot(track[:, 14] * 180/math.pi)              # x
         fig.savefig("tests/test_%d.pdf"%test_counter)
         plt.close(fig)
 
         rwd_h = np.array(reward_hist)
         exp_h = np.array(expected_hist)
         q_h = np.array(q_hist)
-        c     = np.stack([rwd_h, exp_h, q_h]).transpose()
+        fls = np.array(fails)
+        c     = np.stack([rwd_h, exp_h, q_h, fls]).transpose()
         np.savetxt("testing.txt", c)
 
 

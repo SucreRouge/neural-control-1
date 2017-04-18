@@ -48,6 +48,7 @@ class CopterEnv(gym.Env):
         self.target         = np.zeros(3)
         self.threshold      =  2 * math.pi / 180
         self.fail_threshold = 15 * math.pi / 180
+        self._fail_count    = 0
 
         self._seed()
 
@@ -94,6 +95,7 @@ class CopterEnv(gym.Env):
 
         if err > self.fail_threshold:
             reward = -10
+            self._fail_count += 1
             done = True
 
         # random disturbances
