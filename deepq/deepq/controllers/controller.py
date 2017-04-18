@@ -100,7 +100,7 @@ class Controller(object):
     def _get_action(self, test):
         raise NotImplementedError()
 
-    def _observe(self, state, reward, test):
+    def _observe(self, state, last, reward, action, test):
         raise NotImplementedError()
 
     def train(self):
