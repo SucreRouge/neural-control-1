@@ -95,31 +95,31 @@ use_cont   = True
 if use_cont:
     controller = DeepPolicyGradientController(history_length=2, memory_size=2e5, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=2e5, final_epsilon=0.05)
+              minibatch_size=64, final_exploration_frame=1e6, final_epsilon=0.05)
 
     def actor(state):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
         reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        return tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
+        flat = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        return tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
         reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        state_features = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
-        action_features = tf.layers.dense(action, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
+        flat = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        state_features = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
+        action_features = tf.layers.dense(action, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
         features = tf.add(state_features, action_features, name="features")
 
-        features = tf.layers.dense(features, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
+        features = tf.layers.dense(features, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
         return features
 
     # decaing learning rates
     gstep     = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
-    critic_lr = tf.train.exponential_decay(1e-3, gstep, 20000, 0.95, staircase=True)
-    policy_lr = tf.train.exponential_decay(0.5e-4, gstep, 20000, 0.95, staircase=True)
+    critic_lr = tf.train.exponential_decay(1e-4, gstep, 50000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(1e-6, gstep, 50000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
                             critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep)
