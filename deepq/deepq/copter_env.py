@@ -39,7 +39,7 @@ class CopterEnv(gym.Env):
     }
 
     def __init__(self):
-        high = np.array([np.inf]*15)
+        high = np.array([np.inf]*10)
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
@@ -76,7 +76,7 @@ class CopterEnv(gym.Env):
         done = bool(self._steps > 1000)
 
         # positive reward for not falling over
-        reward = 0.2 * (1 - err / self.fail_threshold)
+        reward = max(0.0, 0.2 * (1 - err / self.fail_threshold))
         if err < self.threshold:
             merr = np.mean(np.abs(quad.attitude - self.target)) # this is guaranteed to be smaller than err
             rerr = merr / self.threshold
@@ -93,7 +93,7 @@ class CopterEnv(gym.Env):
         # normalize reward so that we can get at most 1.0 per step
         reward /= 1.5
 
-        if err > self.fail_threshold or quad.position[2] < 0.0 or quad.position[2] > 10:
+        if quad.position[2] < 0.0 or quad.position[2] > 10:
             reward = -10
             self._fail_count += 1
             done = True
@@ -167,7 +167,7 @@ class CopterEnv(gym.Env):
     def _get_state(self):
         s = self.copterstatus
         # currently, we ignore position and velocity!
-        return np.concatenate([s.attitude, s.angular_velocity, self.target, s.position, s.velocity])
+        return np.concatenate([s.attitude, s.angular_velocity, self.target, [s.position[2]]])
 
     def _render(self, mode='human', close=False):
         # currently not implemented
