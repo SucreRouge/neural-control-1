@@ -39,7 +39,7 @@ class CopterEnv(gym.Env):
     }
 
     def __init__(self):
-        high = np.array([np.inf]*9)
+        high = np.array([np.inf]*15)
         
         self.copterparams = CopterParams()
         self.observation_space = spaces.Box(-high, high)
@@ -93,7 +93,7 @@ class CopterEnv(gym.Env):
         # normalize reward so that we can get at most 1.0 per step
         reward /= 1.5
 
-        if err > self.fail_threshold:
+        if err > self.fail_threshold or quad.position[2] < 0.0 or quad.position[2] > 10:
             reward = -10
             self._fail_count += 1
             done = True
@@ -140,9 +140,10 @@ class CopterEnv(gym.Env):
         O4 = math.sqrt(abs(U24 + U2s)/2)
         Or = -O1 + O2 - O3 + O4
 
-        a0  = control[0] * ( math.cos(roll)*math.sin(pitch)*math.cos(yaw) + math.sin(roll)*math.sin(yaw) ) / m
-        a1  = control[0] * ( math.cos(roll)*math.sin(pitch)*math.sin(yaw) + math.sin(roll)*math.cos(yaw) ) / m
-        a2  = control[0] * ( math.cos(roll)*math.cos(pitch) ) / m - g
+        c0 =  (4*control[0] + 1.0) *  m*g
+        a0  = c0 * ( math.cos(roll)*math.sin(pitch)*math.cos(yaw) + math.sin(roll)*math.sin(yaw) ) / m
+        a1  = c0 * ( math.cos(roll)*math.sin(pitch)*math.sin(yaw) + math.sin(roll)*math.cos(yaw) ) / m
+        a2  = c0 * ( math.cos(roll)*math.cos(pitch) ) / m - g
 
         
         aroll  = (dpitch * dyaw * (I[1, 1] - I[2, 2]) + dpitch * Or * J + control[1] * l) / I[0, 0]
@@ -154,6 +155,8 @@ class CopterEnv(gym.Env):
         self.copterstatus = CopterStatus()
         # start in resting position, but with low angular velocity
         self.copterstatus.angular_velocity = self.np_random.uniform(low=-0.1, high=0.1, size=(3,))
+        self.copterstatus.velocity         = self.np_random.uniform(low=-0.1, high=0.1, size=(3,))
+        self.copterstatus.position         = np.array([0.0, 0, 1])
         self.target = self.np_random.uniform(low=-10, high=10, size=(3,)) * math.pi / 180
         self.copterstatus.attitude = self.target + self.np_random.uniform(low=-5, high=5, size=(3,)) * math.pi / 180
         self._steps = 0
@@ -164,7 +167,7 @@ class CopterEnv(gym.Env):
     def _get_state(self):
         s = self.copterstatus
         # currently, we ignore position and velocity!
-        return np.concatenate([s.attitude, s.angular_velocity, self.target])
+        return np.concatenate([s.attitude, s.angular_velocity, self.target, s.position, s.velocity])
 
     def _render(self, mode='human', close=False):
         # currently not implemented

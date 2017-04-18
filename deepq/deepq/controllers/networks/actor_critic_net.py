@@ -48,12 +48,13 @@ class ActorCriticNet(object):
         return session.run([self._policy.action], feed_dict={self._policy.state:state})[0][0]
 
 class ActorCriticBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, soft_target_update=1e-4):
+    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, soft_target_update=1e-4, discount=0.99):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
 
         self._soft_target_update = soft_target_update
+        self._discount           = discount
 
         self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net)
@@ -61,7 +62,7 @@ class ActorCriticBuilder(NetworkBuilder):
     def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
         if gstep is None:
             gstep    = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
-        discount = tf.Variable(0.99, dtype=tf.float32, trainable=False, name='discount')
+        discount = tf.Variable(self._discount, dtype=tf.float32, trainable=False, name='discount')
         if self._soft_target_update:
             tau = tf.Variable(self._soft_target_update, dtype = tf.float32, trainable=False, name="tau")
 
