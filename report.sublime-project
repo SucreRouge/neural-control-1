@@ -13,7 +13,7 @@
         "TEXroot": "latex/report.tex",
         "translate_tabs_to_spaces": true, 
         "preview_math_template_preamble":[  "\\input{/home/erik/Documents/neural-control/latex/preamble.tex}"],
-        "rulers" : [80]
+        "rulers" : [100]
     },
 
 }
