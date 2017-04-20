@@ -1,6 +1,6 @@
 
 class GaussianWhiteNoise:
-    def __init__(self, rand, scale):  
+    def __init__(self, rand, scale=1.0):  
         self._rand  = rand
         self.scale = scale
 

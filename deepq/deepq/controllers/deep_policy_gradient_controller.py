@@ -5,11 +5,14 @@ from .memory import History, Memory
 import tensorflow as tf
 import numpy as np
 
-class EGreedy(object):
-    def __init__(self, start_eps, end_eps, num_steps):
+from deepq import noise
+
+class ExplorationPolicy(object):
+    def __init__(self, start_eps, end_eps, num_steps, noise):
         self._start_epsilon = start_eps
         self._end_epsilon   = end_eps
         self._num_steps     = num_steps
+        self._noise         = noise
         self.epsilon = start_eps
 
     def set_stepcount(self, steps):
@@ -27,19 +30,22 @@ class EGreedy(object):
 class DeepPolicyGradientController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, minibatch_size=64, final_exploration_frame=1000000,
-                    final_epsilon=0.1, warmup_time=10000, discount=0.99):
+                    explorative_noise=None, final_epsilon=0.1, warmup_time=10000, discount=0.99):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
         o = np.ones(action_space.num_actions)
         action_space = rescale(action_space, -o, o)
         super(DeepPolicyGradientController, self).__init__(action_space, state_size, history_length)
 
+        if explorative_noise is None:
+            explorative_noise = noise.GaussianWhiteNoise(np.random)
+
         self._num_actions     = action_space.num_actions[0]
         self._steps_per_epoch = steps_per_epoch
         self._warmup_time     = warmup_time
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
-        self._policy          = EGreedy(1.0, final_epsilon, final_exploration_frame)
+        self._policy          = ExplorationPolicy(1.0, final_epsilon, final_exploration_frame, explorative_noise)
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size,
                                        action_dim = self._num_actions, action_type = float)
 
