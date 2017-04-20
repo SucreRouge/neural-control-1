@@ -101,16 +101,16 @@ if use_cont:
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
         reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
         return tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
         reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        state_features = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
-        action_features = tf.layers.dense(action, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
+        action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
         features = tf.add(state_features, action_features, name="features")
 
         features = tf.layers.dense(features, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
@@ -141,5 +141,5 @@ else:
 
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
-run(task=task, controller=controller, num_frames=1e7, test_every=2e4, 
+run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())
