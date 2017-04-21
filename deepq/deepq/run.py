@@ -93,7 +93,7 @@ class ControlRun(object):
         self.reset_task()
         # a few runs just to test stuff
         results = []
-        for i in range(10):
+        for i in range(25):
             results += [self.run_episode(test=True, record=False)]
             self.reset_task()
         # exemplary test to generate track
