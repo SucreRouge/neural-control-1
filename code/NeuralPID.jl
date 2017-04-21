@@ -1,6 +1,6 @@
 # define the PIDNN module
 module NeuralPID
-    const dt = 0.1
+    const dt = 0.01
     include("PIDNN/controller.jl")
     include("PIDNN/system.jl")
     include("PIDNN/gradients.jl")

@@ -1,6 +1,6 @@
 abstract SystemState
 
-# TODO generalie this to arbitrary 2nd order systems so changing parameters is 
+# TODO generalize this to arbitrary 2nd order systems so changing parameters is 
 # easier.
 
 # State of a second order system
@@ -21,6 +21,8 @@ end
 function observe(state::State2Ord)
     return state.p
 end
+
+Base.isnan(state::State2Ord) = isnan(state.p) || isnan(state.v)
 
 ################################################################################
 
