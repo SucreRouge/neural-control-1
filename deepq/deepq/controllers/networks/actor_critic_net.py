@@ -167,8 +167,8 @@ class ActorCriticBuilder(NetworkBuilder):
 
 
         with tf.name_scope("train_summary"):
-            self._summaries.append(tf.summary.scalar("loss", mse_loss))
-            self._summaries.append(tf.summary.scalar("q_error", loss))
+            self._summaries.append(tf.summary.scalar("loss", loss))
+            self._summaries.append(tf.summary.scalar("q_error", mse_loss))
             self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
             self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
             self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))

@@ -3,21 +3,20 @@ import numpy as np
 from collections import deque
 import time
 import math
+import tempfile
+import os
 from deepq import *
 from deepq.copter_env import CopterEnv
 
 import gym
-dt = 0.1
-
-################################################################################
-#                             Testing Stuff
-################################################################################
-
 import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 from scipy import stats
+
+try:
+    os.mkdir("tests")
 
 def episode_callback():
     reward_hist   = deque()
@@ -95,7 +94,7 @@ use_cont   = True
 if use_cont:
     controller = DeepPolicyGradientController(history_length=2, memory_size=2e5, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=1e6, final_epsilon=0.05)
+              minibatch_size=64, final_exploration_frame=5e5, final_epsilon=0.05)
 
     def actor(state):
         s = [d.value for d in state.get_shape()]
@@ -139,7 +138,8 @@ else:
             controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=1.0e-4)
     controller = NaiveMultiController(controllers, ActionSpace(task.action_space).discretized(9))
 
-sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
+logdir = tempfile.mkdtemp(dir="./logs/")
+sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())
