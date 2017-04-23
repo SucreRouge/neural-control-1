@@ -3,19 +3,21 @@ import numpy as np
 from collections import deque
 import time
 import math
+import tempfile
+import os
 from deepq import *
 from deepq.copter_env import CopterEnv
 
 import gym
-
-################################################################################
-#                             Testing Stuff
-################################################################################
-
 import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+
+try:
+    os.mkdir("tests")
+except:
+    pass
 
 def episode_callback():
     reward_hist   = deque()
@@ -40,10 +42,12 @@ def test_callback():
     reward_hist   = deque()
     expected_hist = deque()
     q_hist        = deque()
+    fails         = deque()
     def call(result, track):
         reward_hist.append(result.total_reward)
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
+        fails.append(task._fail_count)
         epoch   = controller._epoch_counter
         try:
             epsilon = controller._policy.epsilon
@@ -60,15 +64,18 @@ def test_callback():
 
         ax.plot(track[:, 6] * 180/math.pi)              # y
         ax.plot(track[:, 7] * 180/math.pi)              # c
+        ax.plot(track[:, 8] * 180/math.pi)              # c
         ax.plot(track[:, 12] * 180/math.pi)              # x
         ax.plot(track[:, 13] * 180/math.pi)              # x
+        ax.plot(track[:, 14] * 180/math.pi)              # x
         fig.savefig("tests/test_%d.pdf"%test_counter)
         plt.close(fig)
 
         rwd_h = np.array(reward_hist)
         exp_h = np.array(expected_hist)
         q_h = np.array(q_hist)
-        c     = np.stack([rwd_h, exp_h, q_h]).transpose()
+        fls = np.array(fails)
+        c     = np.stack([rwd_h, exp_h, q_h, fls]).transpose()
         np.savetxt("testing.txt", c)
 
 
@@ -95,34 +102,37 @@ def PID():
 def DDPG():
     controller = DeepPolicyGradientController(history_length=2, memory_size=2e5, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=2e5, final_epsilon=0.05)
+              minibatch_size=64, final_exploration_frame=5e5, final_epsilon=0.05)
+
+    critic_regularizer = tf.contrib.layers.l2_regularizer(1e-4)
 
     def actor(state):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
         reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        return tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        return tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
-        reg = tf.contrib.layers.l2_regularizer(1e-4)
-        flat = tf.layers.dense(flat, 600, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        state_features = tf.layers.dense(flat, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
-        action_features = tf.layers.dense(action, 500, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
+        reg = critic_regularizer
+        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
+        state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
+        action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
         features = tf.add(state_features, action_features, name="features")
 
-        features = tf.layers.dense(features, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
+        features = tf.layers.dense(features, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
         return features
 
     # decaing learning rates
     gstep     = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
-    critic_lr = tf.train.exponential_decay(1e-3, gstep, 20000, 0.95, staircase=True)
-    policy_lr = tf.train.exponential_decay(0.5e-4, gstep, 20000, 0.95, staircase=True)
+    critic_lr = tf.train.exponential_decay(1e-4, gstep, 50000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(1e-6, gstep, 50000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
-                            critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep)
+                            critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep,
+                            critic_regularizer=critic_regularizer)
     return controller
 
 def DQN():
@@ -147,7 +157,8 @@ def MultiDQN():
 
 controller = PID()    
 
-sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
+logdir = tempfile.mkdtemp(dir="./logs/")
+sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
-run(task=task, controller=controller, num_frames=1e7, test_every=2e4, 
+run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
     episode_callback=episode_callback(), test_callback = test_callback())

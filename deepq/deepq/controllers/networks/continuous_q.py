@@ -31,11 +31,12 @@ class ContinuousQNetwork(object):
 
 
 class ContinuousQBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, features):
+    def __init__(self, state_size, history_length, num_actions, features, regularizer=None):
         super(ContinuousQBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length,
                                                  num_actions    = num_actions)
-        self._features  = features
+        self._features    = features
+        self._regularizer = regularizer
 
     def _build(self, inputs):
         state = inputs.get("state", None)
@@ -47,8 +48,7 @@ class ContinuousQBuilder(NetworkBuilder):
             action = self.make_action_input("action")
 
         features = self._features(state, action)
-        reg      = tf.contrib.layers.l2_regularizer(1e-4)
-        q_value  = tf.layers.dense(features, 1, name="q_value", kernel_regularizer=reg)
+        q_value  = tf.layers.dense(features, 1, name="q_value", kernel_regularizer=self._regularizer)
         
         with tf.name_scope("summary"):
             self._summaries.append(tf.summary.scalar("mean_q", tf.reduce_mean(q_value)))

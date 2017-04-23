@@ -17,8 +17,8 @@
   \clearpage
   \section{Introduction}
     In any kind of technical system $\state(t)$ that should automatically 
-    be held in a state $\setpoint(t)$ (i.e. error $\error(t) := \setpoint(t) - \state(t)$ is minimized) 
-    some form of control is necessary. 
+    be held in a state $\setpoint(t)$ (i.e. error $\error(t) := \setpoint(t) - \state(t)$ is 
+    minimized) some form of control is necessary. 
     Except for the most simple cases, this requires a feedback loop which produces a 
     control output $\control(t) = \control(\state(t), \setpoint(t))$ that influences the system.
 
@@ -27,27 +27,28 @@
     In this case $\control$ is a linear superposition of the current error, 
     the change rate in the error and the integral over all past errors
     \begin{align}
-        \control(T) = P \error(T) + I \int_0^T \error(t) \dt + D \dot{\error}(T). \label{eq:control_equation}
+        \control(T) = P \error(T) + I \int_0^T \error(t) \dt + D \dot{\error}(T). 
+        \label{eq:control_equation}
     \end{align}
 
     This algorithm works reasonably well for many systems.
     There are two drawbacks that one would like to improve: The algorithm requires 
     the three parameters $p, i, d$ to be tuned, and their optimal values may depend 
-    on the current operating regime. Further, long time delays or strong nonlinearities in the system reduce the 
-    effectiveness of PID control \cite{}.
-    Therefore, extensions to PID control have been 
-    proposed that borrow ideas from neural networks \cite{cong_novel_2005,yu_applying_2006,shu_pid_2000}.
+    on the current operating regime. Further, long time delays or strong nonlinearities in the 
+    system reduce the effectiveness of PID control \cite{}.
+    Therefore, extensions to PID control have been proposed that borrow ideas from neural networks 
+    \cite{cong_novel_2005,yu_applying_2006,shu_pid_2000}.
 
     While there exist different variations for neural PIDs in the literature, 
-    the basic idea remains the same: We consider the PID parameters $P, I, D$ as dynamical parameters 
-    (weights in the language of neural networks) and try to optimize them such that a 
+    the basic idea remains the same: We consider the PID parameters $P, I, D$ as dynamical 
+    parameters (weights in the language of neural networks) and try to optimize them such that a 
     loss function $L$ is minimized. 
     The loss function is chosen to be the squared error loss 
     \begin{align}
         L(T) = 0.5 \int_0^T \error(t)^2 \dt. \label{eq:l2loss}
     \end{align}
-    In \cite{shu_pid_2000} the neurons additionaly possess a nonlinear activation function, in \cite{} 
-    the input to the neurons (the error term) is modelled by additional parameters 
+    In \cite{shu_pid_2000} the neurons additionaly possess a nonlinear activation function, in
+     \cite{} the input to the neurons (the error term) is modelled by additional parameters 
     $\error = \alpha \setpoint + \beta \state$.
 
 
@@ -70,14 +71,16 @@
     \begin{align}
         \ddot{\state} = a \dot{\state} + b \state + c \control. \label{eq:qe_of_motion_system}
     \end{align}
-    The control term is calculated as for a PID controller according to equation \eqref{eq:control_equation}. 
+    The control term is calculated as for a PID controller according to equation 
+    \eqref{eq:control_equation}. 
     We call $w = (P, I, D)$ the parameter or weight vector. 
     We will be switching between discrete and continuous time formulations, 
     where $\att{t}{k} \define k \cdot \Delta t$ and in general $\att{x}{k} \define x(\att{t}{k})$.
 
 
     The update rule for the weights that is used in the literature \cite{cong_novel_2005} 
-    (termed \emph{resilient backpropagation}) constitutes a very crude approximation to gradient descend
+    (termed \emph{resilient backpropagation}) constitutes a very crude approximation to gradient 
+    descend
     \begin{align}
         \att{w}{k+1} &= \att{w}{k} + \learningrate \left( \att{\error}{k} \cdot 
                         \sign \left(\frac{\att{\state}{k+1} - \att{\state}{k}}{\att{\control}{k} 
@@ -88,9 +91,10 @@
 
     The success of this method can be seen in figure \ref{fig:demo}, where we a classical PID 
     and its adaptive counterpart, for exactly the same configuration and initial weights. 
-    The PIDNN managed to reduce the total loss from $5.15$ to $3.68$. However, the learning drives the PIDNN towards a 
-    parameter regime where it becomes unstable, as can be seen in \ref{fig:demo:diverging} where the setpoint following 
-    a rectangular function makes it impossible for the learning to stop. 
+    The PIDNN managed to reduce the total loss from $5.15$ to $3.68$. However, the learning drives 
+    the PIDNN towards a parameter regime where it becomes unstable, as can be seen in 
+    \ref{fig:demo:diverging} where the setpoint following a rectangular function makes it impossible
+    for the learning to stop. 
 
     \begin{figure}[tb]
     \begin{subfigure}[c]{0.5\textwidth}
@@ -103,10 +107,11 @@
         \subcaption{Alternating Setpoint}
         \label{fig:demo:diverging}
     \end{subfigure}
-    \caption{Application of the PIDNN algorithm to the system \eqref{eq:qe_of_motion_system}, for a constant setpoint 
-    and a setpoint following a rect function. For reference
-    the system development with a PID controller that has the same starting weights as the PIDNN is shown. While the PIDNN 
-    works seemingly well for the constant target, it exhibits diverging behaviour in the second case.}
+    \caption{Application of the PIDNN algorithm to the system \eqref{eq:qe_of_motion_system}, for a 
+    constant setpoint and a setpoint following a rect function. For reference the system development
+    with a PID controller that has the same starting weights as the PIDNN is shown. While the PIDNN 
+    works seemingly well for the constant target, it exhibits diverging behaviour in the second 
+    case.}
     \label{fig:demo}
     \end{figure}
 
@@ -124,16 +129,17 @@
 
 
   \section{Stability Analysis}
-    This example shows that the PIDNN can play havoc with system stability. The following sections investigate why and 
-    under which conditions this happens. 
+    This example shows that the PIDNN can play havoc with system stability. The following sections 
+    investigate why and under which conditions this happens. 
 
-    The aim of finding optimal PID weights through gradient descent with respect to the loss function eq. 
-    \eqref{eq:l2loss} can be cast in two different ways. Either aim at finding constant weights that minimize the loss 
-    over all time, or start to consider the weights as truly dynamical parameters and use locally optimal values.
+    The aim of finding optimal PID weights through gradient descent with respect to the loss 
+    function eq. \eqref{eq:l2loss} can be cast in two different ways. Either aim at finding constant
+    weights that minimize the loss over all time, or start to consider the weights as truly 
+    dynamical parameters and use locally optimal values.
 
 
 
-  \subsection{Global Minimization of $L^2$ Loss}
+  \subsection{Global Minimization of \texorpdfstring{$L^2$}{L2} Loss}
     \label{sq:L2Loss}
     To investigate the objective that the loss function tries to optimize globally, we first derive the combined 
     equations of motion of \eqref{eq:qe_of_motion_system} and \eqref{eq:control_equation}.
@@ -165,15 +171,16 @@
     With that we can write down loss
     \begin{align}
         L &= \frac{1}{2} \int_0^{\infty} A^2 e^{2(\gamma + \lambda) t} + 2 A B e^{2\gamma t} + B^2 e^{2(\gamma - \lambda) t} \dt\\
-          &= \frac{A^2}{4(\gamma + \lambda)} + \frac{2 A B}{4\gamma} + \frac{B^2}{4(\gamma - \lambda)} \nonumber \\
-          &= \frac{A^2 (\gamma - \lambda) + B^2 (\gamma + \lambda)}{4(\gamma + \lambda)(\gamma - \lambda)} + \frac{A B}{2\gamma} \nonumber \\
-          &= \left( \frac{(\gamma - \lambda)^3 + (\gamma + \lambda)^3}{4(\gamma + \lambda)(\gamma - \lambda)} - 
-          \frac{(\gamma - \lambda) (\gamma + \lambda)}{2\gamma} \right) \frac{y^2}{4 \lambda^2}.
+          &= -\frac{A^2}{4(\gamma + \lambda)} - \frac{2 A B}{4\gamma} - \frac{B^2}{4(\gamma - \lambda)} \nonumber \\
+          &= -\frac{A^2 (\gamma - \lambda) + B^2 (\gamma + \lambda)}{4(\gamma + \lambda)(\gamma - \lambda)} - \frac{A B}{2\gamma} \nonumber \\
+          &= \left(\frac{(\gamma - \lambda) (\gamma + \lambda)}{2\gamma} - 
+                   \frac{(\gamma - \lambda)^3 + (\gamma + \lambda)^3}{4(\gamma + \lambda)(\gamma - \lambda)}\right) 
+             \frac{y^2}{4 \lambda^2}.
     \end{align}
     Merging the two fractions simplifies the expression to
     \begin{align}
-        L &= \frac{y^2}{8 \gamma} \cdot \left( \frac{5 \gamma^2 - \lambda^2}{\gamma^2 - \lambda^2}\right)\\
-          &= \frac{y^2}{4 (a - D)} \cdot \left( \frac{(a - D)^2}{P} + 1\right)
+        L &= \frac{y^2}{8 \gamma} \cdot \left( \frac{\lambda^2 - 5 \gamma^2}{\gamma^2 - \lambda^2}\right)\\
+          &= \frac{y^2}{4 (D - a)} \cdot \left( \frac{(a - D)^2}{P} + 1\right) \label{eq:l2loss_simplified}
     \end{align}
     The value $\gamma$ does not depend on $P$, so the loss is 
     monotonically decreasing in $P$, meaning that the optimal value is $P \rightarrow \infty$.
@@ -182,7 +189,21 @@
     extreme simple model which allows the controlled system to react arbitrarily fast. Any 
     real physical system (or even simulation with discrete time step $\Delta t$) exhibits 
     delays and nonlinearities that prevent $P \rightarrow \infty$ from being the optimal
-    solution.
+    solution. We can demonstrate that by a simple numerical simulation: Setting $a=y=1, D=2$
+    in the above equations and simulating the corresponding system with a discrete time step
+    of $dt=0.1$ for different values of $P$ we find a minimum in the loss for finite $P$, see 
+    figure \ref{fig:l2_compare}.
+
+    \begin{figure}[tb]
+        \centering
+        \includegraphics[width=0.75\textwidth]{../figures/compare_l2.pdf}
+        \caption{Total $L^2$ loss (up to $T=1000$) for $a=y=1, 
+        D=2$, calculated with formular \eqref{eq:l2loss_simplified} and simulated 
+        with time discretizations $\dt=0.1$ and $\dt = 0.01$. We can see that the
+        discretization introduces a minimum that moves towards infinity as $\dt$
+        becomes smaller.}
+        \label{fig:l2_compare}
+    \end{figure}
 
     The above calculation is meant to show that one needs to be careful when optimizing 
     with respect to $L^2$ loss as this does not place any direct constraints on the 
@@ -251,7 +272,7 @@
 
 
 
-  \subsection{Difference Quotient}
+  \subsection{Approximation by Difference Quotient}
     The approach taken in the literature \cite{cong_novel_2005} is to use eq. \eqref{eq:discrete_gradient} but approximate 
     \begin{align}
         \pdiv{\att{\state}{k+1}}{\att{\control}{k}} \approx \frac{\att{\state}{k+1} - \att{\state}{k}}{\att{\control}{k} - \att{\control}{k-1}}.
@@ -399,38 +420,65 @@
         \subcaption{Development of Weights. Dashed: Taylor, Solid: Resilient}
         \label{subfig:sim:weights}
     \end{subfigure}
-    \caption{Simulation of PIDNN control of the system described by eq. \eqref{eq:demo_system}, trying to follow
-             a rectangular setpoint signal. For the
-             system development only a short time window is shown, as indicated by the dotted lines.
+    \caption{Simulation of PIDNN control of the system described by eq. \eqref{eq:demo_system}, 
+             trying to follow a rectangular setpoint signal. For the system development only a short
+              time window is shown, as indicated by the dotted lines.
              In this time frame the Taylor algorithm starts to diverge whereas Resilient still
              remains stable. However, at the end of the investigated time Resilient produces
-             negative weights and it also diverges. For this simulation the $I$ weight has been held constant.}
+             negative weights and it also diverges. For this simulation the $I$ weight has been held 
+             constant.}
     \label{fig:weights}
     \end{figure}
 
-    To get a better overview of the behaviour of the learning algorithm, figure \ref{fig:quiver} depicts the weight 
-    change in dependence on the current weight, as well as the caused error and exemplary trajectories for the weight
-    development. The graph shows that there is no possible way for the system to reach a stable fixed point or limit 
-    cycle in the area where the error is small. Doing a similar plot for the update rule based on the Taylor expansion
-    does not reveal any new information, it just shows that $p$ and $d$ always increase.
+    To get a better overview of the behaviour of the learning algorithm, figure \ref{fig:quiver} 
+    depicts the weight change in dependence on the current weight.
+    The graph shows that there is no possible way for the system to reach a stable fixed point or 
+    limit cycle in the area where the error is small. 
+    Doing a similar plot for the update rule based on the Taylor expansion
+    does not reveal any new information, it just shows that $P$ and $D$ always increase.
 
     \begin{figure}[tb]
         \centering
         \includegraphics[width=1.0\textwidth]{../figures/quiver.pdf}
-        \caption{Direction of weight change given current weights, for the system \eqref{eq:demo_system} with Resilient 
-        PIDNN control and fixed $I$ weight. 
-        The background color indicates the error that the given weights would generate were they used with a static PID 
-        controller, where green indicates low error. Data points which do not have an arrow indicate that the 
-        weight changes become too large or even diverged.}
+        \caption{Direction of weight change given current weights, for the system 
+        \eqref{eq:demo_system} with Resilient PIDNN control and fixed $I$ weight. 
+        The background color indicates the error that the given weights would generate were they 
+        used with a static PID controller, where green indicates low error. 
+        Data points which do not have an arrow indicate that the weight changes became too large 
+        or even diverged.}
         \label{fig:quiver}
     \end{figure}
 
+    \section{Discussion}
+    In the preceding argumentation we can make out several shortcomings of the 
+    PIDNN approach. At first, there is the problem that the $L^2$ loss does not 
+    completely capture the notion of a successful system, as it does not 
+    directly limit the velocities and forces that occur. However, we argued that
+    this is mostly a theoretical problem as the system dynamics itself will 
+    prevent arbitrarily fast movements. 
+
+    The second problem arises from the fact that the system dynamics are unknown,
+    but we would need them in order to correctly backpropagate the error to the 
+    system control of the previous timestep. Both approaches taken, using a local
+    Taylor approximation and replacing the actual derivative with a difference 
+    quotient have proven to be not successful.
+
+    Finally there is the so called "credit assigment problem". In a realistic 
+    setting a control output $\att{\control}{k}$ might not affect the 
+    system behaviour until many timesteps later, but our algorithm always 
+    assumes an immediate effect. This is somewhat justified by the argument that
+    both the system states $\att{\state}{k}$ and the control values 
+    $\att{\control}{k}$ are temporally highly correlated sequences. 
+
     \section{TODO}
     \begin{itemize}
-        \item A section about the Lyapunov stability argument found in some papers, and figure out why it is wrong/incomplete.
+        \item A section about the Lyapunov stability argument found in some papers, and figure out 
+                why it is wrong/incomplete.
                 \cite{cong_novel_2005}
-        \item Look at more complicated ideas to combine PIDs and NNs. \cite{andrasik_-line_2004,zribi_new_2015}
-        \item Numerical experiment in more complicated setting (maybe inverted pendulum as a classical benchmark).
+        \item Look at more complicated ideas to combine PIDs and NNs. 
+                \cite{andrasik_-line_2004,zribi_new_2015}
+        \item Numerical experiment in more complicated setting (maybe inverted pendulum as a 
+              classical benchmark).
         \item Conclusion
     \end{itemize}
 

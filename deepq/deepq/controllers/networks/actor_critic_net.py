@@ -48,7 +48,8 @@ class ActorCriticNet(object):
         return session.run([self._policy.action], feed_dict={self._policy.state:state})[0][0]
 
 class ActorCriticBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, soft_target_update=1e-4, discount=0.99):
+    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, soft_target_update=1e-4, discount=0.99, 
+                critic_regularizer=None):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
@@ -56,7 +57,7 @@ class ActorCriticBuilder(NetworkBuilder):
         self._soft_target_update = soft_target_update
         self._discount           = discount
 
-        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net)
+        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net, regularizer=critic_regularizer)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net)
 
     def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
@@ -123,15 +124,16 @@ class ActorCriticBuilder(NetworkBuilder):
             # ensure target_q is never too far from current_q
             with tf.name_scope("clipped_target"):
                 bound    = 1
+                old_target_q = target_q
                 distance = tf.clip_by_value(target_q - current_q, -bound, bound)
                 target_q = current_q + distance
 
-            loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
+            mse_loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
 
             # regularization
             with tf.name_scope("regularization_loss"):
                 critic_reg_loss = tf.reduce_sum(critic._regularizers)
-            loss = loss + critic_reg_loss
+            loss = mse_loss + critic_reg_loss
 
             # get all further gradients
             ctrain = critic_optimizer.minimize(loss, global_step=self._net._global_step, name="CriticOptimizer")
@@ -167,8 +169,12 @@ class ActorCriticBuilder(NetworkBuilder):
 
         with tf.name_scope("train_summary"):
             self._summaries.append(tf.summary.scalar("loss", loss))
+            self._summaries.append(tf.summary.scalar("q_error", mse_loss))
             self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
             self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
+            self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
+            self._summaries.append(tf.summary.histogram("q_update", old_target_q - current_q))
+            self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
             self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
             self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
         
