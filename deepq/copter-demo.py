@@ -7,7 +7,6 @@ from deepq import *
 from deepq.copter_env import CopterEnv
 
 import gym
-dt = 0.1
 
 ################################################################################
 #                             Testing Stuff
@@ -17,7 +16,6 @@ import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
-from scipy import stats
 
 def episode_callback():
     reward_hist   = deque()
@@ -47,7 +45,10 @@ def test_callback():
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
         epoch   = controller._epoch_counter
-        epsilon = controller._policy.epsilon
+        try:
+            epsilon = controller._policy.epsilon
+        except:
+            epsilon = 0
         acount  = controller.frame_count
         test_counter = len(reward_hist)
 
@@ -83,11 +84,15 @@ def arch(inp):
     return fc
 
 task = CopterEnv()
-use_single = False
-use_cont   = True
 
-# single controller
-if use_cont:
+def PID():
+    vals = [0, 0, 1, 2]
+    tgts = [0, 6, 7, 8]
+    controller = SimplePIDController(state_size=task.observation_space.shape[0], action_space=task.action_space,
+                                     values = vals, targets = tgts)
+    return controller
+
+def DDPG():
     controller = DeepPolicyGradientController(history_length=2, memory_size=2e5, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
               minibatch_size=64, final_exploration_frame=2e5, final_epsilon=0.05)
@@ -118,13 +123,16 @@ if use_cont:
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
                             critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep)
-elif use_single:
+    return controller
+
+def DQN():
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),
               final_exploration_frame=2e5, minibatch_size=32)
     controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
-# factored controller
-else:
+    return controller
+
+def MultiDQN():
     controllers = [DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=action_space.spaces.Discrete(9),
               steps_per_epoch=20000, final_exploration_frame=5e5, minibatch_size=32) 
@@ -133,6 +141,11 @@ else:
         with tf.variable_scope("controller_%d"%i):
             controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=1.0e-4)
     controller = NaiveMultiController(controllers, ActionSpace(task.action_space).discretized(9))
+    return controller
+
+
+
+controller = PID()    
 
 sw = tf.summary.FileWriter('./logs/', graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
