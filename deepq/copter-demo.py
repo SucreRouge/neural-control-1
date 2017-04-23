@@ -14,10 +14,14 @@ mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 
+logdir = tempfile.mkdtemp(dir="./logs/")
+testdir = os.path.join(logdir, "tests")
 try:
-    os.mkdir("tests")
+    os.makedirs(testdir)
 except:
     pass
+prgfile = os.path.join(logdir, "progress.txt")
+tstfile = os.path.join(logdir, "testing.txt")
 
 def episode_callback():
     reward_hist   = deque()
@@ -33,7 +37,7 @@ def episode_callback():
             exp_h = np.array(expected_hist)
             frm_h = np.array(frame_hist)
             c     = np.stack([frm_h, rwd_h, exp_h]).transpose()
-            np.savetxt("progress.txt", c)
+            np.savetxt(prgfile, c)
             if len(reward_hist) > 100:
                 print(np.mean(np.array(reward_hist)[-100:]))
     return call
@@ -68,15 +72,15 @@ def test_callback():
         ax.plot(track[:, 12] * 180/math.pi)              # x
         ax.plot(track[:, 13] * 180/math.pi)              # x
         ax.plot(track[:, 14] * 180/math.pi)              # x
-        fig.savefig("tests/test_%d.pdf"%test_counter)
+        fig.savefig(os.path.join(testdir, "test_%d.pdf"%test_counter))
         plt.close(fig)
 
         rwd_h = np.array(reward_hist)
         exp_h = np.array(expected_hist)
-        q_h = np.array(q_hist)
-        fls = np.array(fails)
+        q_h   = np.array(q_hist)
+        fls   = np.array(fails)
         c     = np.stack([rwd_h, exp_h, q_h, fls]).transpose()
-        np.savetxt("testing.txt", c)
+        np.savetxt(tstfile, c)
 
 
     return call
@@ -155,9 +159,8 @@ def MultiDQN():
 
 
 
-controller = PID()    
+controller = DDPG()    
 
-logdir = tempfile.mkdtemp(dir="./logs/")
 sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
