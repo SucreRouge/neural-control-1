@@ -17,6 +17,8 @@ from scipy import stats
 
 try:
     os.mkdir("tests")
+except:
+    pass
 
 def episode_callback():
     reward_hist   = deque()
@@ -96,6 +98,8 @@ if use_cont:
               state_size=task.observation_space.shape[0], action_space=task.action_space,
               minibatch_size=64, final_exploration_frame=5e5, final_epsilon=0.05)
 
+    critic_regularizer = tf.contrib.layers.l2_regularizer(1e-4)
+
     def actor(state):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
@@ -106,7 +110,7 @@ if use_cont:
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
         flat = tf.reshape(state, [-1, s[1]*s[2]])
-        reg = tf.contrib.layers.l2_regularizer(1e-4)
+        reg = critic_regularizer
         flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
         state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
         action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
@@ -121,7 +125,8 @@ if use_cont:
     policy_lr = tf.train.exponential_decay(1e-6, gstep, 50000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
-                            critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep)
+                            critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep,
+                            critic_regularizer=critic_regularizer)
 elif use_single:
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),

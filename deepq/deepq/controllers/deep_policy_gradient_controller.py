@@ -89,22 +89,24 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
-    def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate=1e-4, critic_learning_rate=1e-3, 
-                          soft_target=False, global_step = None):
+    def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate = 1e-4, critic_learning_rate = 1e-3, 
+                          soft_target = False, global_step = None, critic_regularizer = None):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self.history_length, 
                     num_actions     = self._num_actions,
                     soft_target_update = soft_target,
                     critic_net      = critic_net,
                     policy_net      = actor_net,
-                    discount        = self._discount)
+                    discount        = self._discount,
+                    critic_regularizer = critic_regularizer)
 
         self._soft_target_update = soft_target
 
         # TODO Figure these out!
         aopt = tf.train.AdamOptimizer(learning_rate=actor_learning_rate)
         copt = tf.train.AdamOptimizer(learning_rate=critic_learning_rate)
-        self._qnet = qnet.build(actor_optimizer=aopt, critic_optimizer=copt, graph = graph, gstep=global_step)
+        self._qnet = qnet.build(actor_optimizer = aopt, critic_optimizer = copt, graph = graph, 
+                                gstep = global_step)
 
         # setup variable statistics
         with tf.name_scope("weight_summaries"):
