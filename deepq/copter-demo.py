@@ -82,6 +82,8 @@ def test_callback():
         c     = np.stack([rwd_h, exp_h, q_h, fls]).transpose()
         np.savetxt(tstfile, c)
 
+        controller.save(os.path.join(logdir, "copter-demo"))
+
 
     return call
 
@@ -104,39 +106,46 @@ def PID():
     return controller
 
 def DDPG():
-    controller = DeepPolicyGradientController(history_length=2, memory_size=2e5, 
-              state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=5e5, final_epsilon=0.05)
-
     critic_regularizer = tf.contrib.layers.l2_regularizer(1e-4)
+    initializer        = tf.random_uniform_initializer(-3e-3, 3e-3)
+    explorative_noise  = noise.OrnsteinUhlenbeckNoise(mu = 0.0, theta = 0.15, sigma=0.2)
+
+    controller = DeepPolicyGradientController(history_length=2, memory_size=1e6, 
+              state_size=task.observation_space.shape[0], action_space=task.action_space,
+              minibatch_size=64, final_exploration_frame=1e6, final_epsilon=0.05,
+              explorative_noise=explorative_noise)
 
     def actor(state):
         s = [d.value for d in state.get_shape()]
-        flat = tf.reshape(state, [-1, s[1]*s[2]])
+        flat = tf.reshape(state, [-1, s[1]*s[2]], name="state")
         reg = tf.contrib.layers.l2_regularizer(1e-4)
         flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
         return tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="fc2")
 
     def critic(state, action):
         s = [d.value for d in state.get_shape()]
-        flat = tf.reshape(state, [-1, s[1]*s[2]])
+        flat = tf.reshape(state, [-1, s[1]*s[2]], name="state")
         reg = critic_regularizer
-        flat = tf.layers.dense(flat, 400, activation=tf.nn.relu, kernel_regularizer=reg, name="fc1")
-        state_features = tf.layers.dense(flat, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="state_features")
-        action_features = tf.layers.dense(action, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="action_features")
+        params = {'activation':  tf.nn.relu,
+                  'kernel_regularizer': reg}
+
+        flat = tf.layers.dense(flat, 400, name="fc1", **params)
+        state_features  = tf.layers.dense(flat,   300, name="state_features",  **params)
+        action_features = tf.layers.dense(action, 300, name="action_features", **params)
         features = tf.add(state_features, action_features, name="features")
 
-        features = tf.layers.dense(features, 300, activation=tf.nn.relu, kernel_regularizer=reg, name="features2")
+        features = tf.layers.dense(features, 300, name="features2", **params)
         return features
 
     # decaing learning rates
-    gstep     = tf.Variable(0,    dtype=tf.int64,   trainable=False, name="global_step")
-    critic_lr = tf.train.exponential_decay(1e-4, gstep, 50000, 0.95, staircase=True)
-    policy_lr = tf.train.exponential_decay(1e-6, gstep, 50000, 0.95, staircase=True)
+    gstep     = tf.Variable(0, dtype=tf.int64, trainable=False, name="global_step")
+    critic_lr = tf.train.exponential_decay(1e-3, gstep, 100000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(1e-4, gstep, 100000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
                             critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep,
-                            critic_regularizer=critic_regularizer)
+                            critic_regularizer=critic_regularizer, critic_init=initializer,
+                            policy_init=initializer)
     return controller
 
 def DQN():
