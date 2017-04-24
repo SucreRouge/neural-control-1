@@ -26,11 +26,12 @@ class PolicyNet(object):
         return self._summaries
 
 class ContinuousPolicyBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, features):
+    def __init__(self, state_size, history_length, num_actions, features, initializer = None):
         super(ContinuousPolicyBuilder, self).__init__(state_size     = state_size, 
                                                       history_length = history_length,
                                                       num_actions    = num_actions)
-        self._features = features
+        self._features    = features
+        self._initializer = initializer
 
     def _build(self, inputs):
         state = inputs.get("state", None)
@@ -38,7 +39,8 @@ class ContinuousPolicyBuilder(NetworkBuilder):
             state = self.make_state_input("state")
         features = self._features(state)
         reg      = tf.contrib.layers.l2_regularizer(1e-4)
-        action   = tf.layers.dense(features, self.num_actions, activation=tf.tanh, name="action", kernel_regularizer=reg)
+        action   = tf.layers.dense(features, self.num_actions, activation=tf.tanh, name="action", 
+                                    kernel_regularizer=reg, kernel_initializer = self._initializer)
         self._summaries += [tf.summary.histogram("action", action)]
         return PolicyNet(state = state, action = action, scope = tf.get_variable_scope(), 
                          summaries = self._summaries)

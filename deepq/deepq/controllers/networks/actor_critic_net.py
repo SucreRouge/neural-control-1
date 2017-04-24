@@ -7,6 +7,10 @@ class ActorCriticNet(object):
     def __init__(self, global_step):
         self._global_step = global_step
 
+    @property
+    def global_step(self):
+        return self._global_step
+
     def set_policy(self, policy):
         self._policy = policy
 
@@ -48,8 +52,9 @@ class ActorCriticNet(object):
         return session.run([self._policy.action], feed_dict={self._policy.state:state})[0][0]
 
 class ActorCriticBuilder(NetworkBuilder):
-    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, soft_target_update=1e-4, discount=0.99, 
-                critic_regularizer=None):
+    def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, 
+                 soft_target_update=1e-4, discount=0.99, 
+                 critic_regularizer=None, critic_init=None, policy_init=None):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
@@ -57,8 +62,11 @@ class ActorCriticBuilder(NetworkBuilder):
         self._soft_target_update = soft_target_update
         self._discount           = discount
 
-        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net, regularizer=critic_regularizer)
-        self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net)
+        self._critic_builder = ContinuousQBuilder(state_size, history_length, num_actions, critic_net, 
+                                                  regularizer = critic_regularizer,
+                                                  initializer = critic_init)
+        self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net,
+                                                  initializer = policy_init)
 
     def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
         if gstep is None:

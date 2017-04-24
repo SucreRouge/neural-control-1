@@ -95,8 +95,12 @@ class DeepPolicyGradientController(Controller):
             if self._next_epoch:
                 self._next_epoch()
 
+    def save(self, name):
+        self._saver.save(self.session, name, global_step=self._qnet.global_step)
+
     def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate = 1e-4, critic_learning_rate = 1e-3, 
-                          soft_target = False, global_step = None, critic_regularizer = None):
+                          soft_target = False, global_step = None, critic_regularizer = None,
+                          critic_init = None, policy_init = None):
         qnet = ActorCriticBuilder(state_size     = self._state_size, 
                     history_length  = self.history_length, 
                     num_actions     = self._num_actions,
@@ -104,7 +108,9 @@ class DeepPolicyGradientController(Controller):
                     critic_net      = critic_net,
                     policy_net      = actor_net,
                     discount        = self._discount,
-                    critic_regularizer = critic_regularizer)
+                    critic_regularizer = critic_regularizer,
+                    critic_init     = critic_init,
+                    policy_init     = policy_init)
 
         self._soft_target_update = soft_target
 
@@ -118,3 +124,6 @@ class DeepPolicyGradientController(Controller):
         with tf.name_scope("weight_summaries"):
             summaries = [tf.summary.histogram(var.name, var) for var in tf.trainable_variables()]
             self._var_summaries = tf.summary.merge(summaries)
+
+        # setup saver
+        self._saver = tf.train.Saver()
