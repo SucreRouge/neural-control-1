@@ -81,6 +81,11 @@ class DeepPolicyGradientController(Controller):
 
         sample = self._state_memory.sample(self._minibatch_size)
         ls = self._qnet.train_step(sample, self._session, summary_writer)
+
+        # in case of soft updates, we update after each train step
+        if self._soft_target_update:
+            self._qnet.update_target(self._session)
+        
         self._step_counter += 1
         if self._step_counter > self._steps_per_epoch:
             # copy target net to policy net if we do hard target updates

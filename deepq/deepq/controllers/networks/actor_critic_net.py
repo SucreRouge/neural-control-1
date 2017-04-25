@@ -128,6 +128,7 @@ class ActorCriticBuilder(NetworkBuilder):
 
     def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
         current_q = critic.q_value
+        # calculate all the required gradients
         with tf.variable_scope("critic_training"):
             # ensure target_q is never too far from current_q
             with tf.name_scope("clipped_target"):
@@ -144,7 +145,8 @@ class ActorCriticBuilder(NetworkBuilder):
             loss = mse_loss + critic_reg_loss
 
             # get all further gradients
-            ctrain = critic_optimizer.minimize(loss, global_step=self._net._global_step, name="CriticOptimizer")
+            critic_grads = critic_optimizer.compute_gradients(loss)
+            cgops = tf.group(*[u[0] for u in critic_grads if u[0] is not None], name="all_critic_gradients")
 
         with tf.variable_scope("policy_training"):
             tvars = tf.trainable_variables()
@@ -166,13 +168,15 @@ class ActorCriticBuilder(NetworkBuilder):
                     if summed[i] is not None:
                         summed[i] = summed[i] / batch_size
 
+            agops = tf.group(*[u for u in summed if u is not None], name="all_critic_gradients")
 
-            atrain = actor_optimizer.apply_gradients(zip(summed, tvars), name="PolicyOptimizer")
-
-        if self._soft_target_update:
-            train = tf.group(ctrain, atrain, self._net._actor_update, self._net._critic_update, name="train_step")
-        else:
-            train = tf.group(ctrain, atrain, name="train_step")
+        # then perform the update. set control dependencies to ensure that weight changes are not 
+        # interleaved with gradient calculations
+        with tf.name_scope("train_step"):
+            with tf.control_dependencies([agops, cgops]):
+                ctrain = critic_optimizer.apply_gradients(critic_grads, global_step=self._net._global_step, name="CriticOptimizer")
+                atrain = actor_optimizer.apply_gradients(zip(summed, tvars), name="PolicyOptimizer")
+                train = tf.group(ctrain, atrain, name="train_step")
 
 
         with tf.name_scope("train_summary"):
