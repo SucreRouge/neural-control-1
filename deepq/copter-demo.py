@@ -1,10 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from collections import deque
-import time
-import math
-import tempfile
-import os
+import time, math, tempfile, os, argparse
 from deepq import *
 from deepq.copter_env import CopterEnv
 
@@ -14,12 +11,23 @@ mpl.use("Agg")
 
 import matplotlib.pyplot as plt
 
-logdir = tempfile.mkdtemp(dir="./logs/")
-testdir = os.path.join(logdir, "tests")
-try:
-    os.makedirs(testdir)
-except:
-    pass
+def ensuredir(path):
+    try:
+        os.makedirs(path)
+    except:
+        pass
+    return path
+
+parser = argparse.ArgumentParser(description='Run the copter environment')
+parser.add_argument('-logdir', type=str, required=False, help='target directory for logfiles')
+args = parser.parse_args()
+
+if args.logdir is None:
+    logdir = tempfile.mkdtemp(dir="./logs/")
+else:
+    logdir = ensuredir(args.logdir)
+
+testdir = ensuredir(os.path.join(logdir, "tests"))
 prgfile = os.path.join(logdir, "progress.txt")
 tstfile = os.path.join(logdir, "testing.txt")
 
