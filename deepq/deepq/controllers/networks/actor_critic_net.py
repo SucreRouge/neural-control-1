@@ -20,9 +20,10 @@ class ActorCriticNet(object):
     def set_bellman(self, bellman):
         self._bellman = bellman
 
-    def set_training_ops(self, loss, train):
+    def set_training_ops(self, loss, train, train_critic):
         self._train_loss     = loss
         self._train_step     = train
+        self._train_critic   = train_critic
 
     def _train_feed(self, qs):
         b = self._bellman
@@ -40,6 +41,16 @@ class ActorCriticNet(object):
             _, loss, Q = session.run([self._train_step, self._train_loss, crt], feed_dict = feed)
         else:
             _, loss, smr, step, Q = session.run([self._train_step, self._train_loss, self._summaries, self._global_step, crt], feed_dict = feed)
+            summary_writer.add_summary(smr, step)
+        return loss, Q
+
+    def train_step_critic(self, qs, session, summary_writer=None):
+        feed = self._train_feed(qs)
+        crt = self._critic.q_value
+        if summary_writer is None:
+            _, loss, Q = session.run([self._train_critic, self._train_loss, crt], feed_dict = feed)
+        else:
+            _, loss, smr, step, Q = session.run([self._train_critic, self._train_loss, self._summaries, self._global_step, crt], feed_dict = feed)
             summary_writer.add_summary(smr, step)
         return loss, Q
 
@@ -204,7 +215,7 @@ class ActorCriticBuilder(NetworkBuilder):
                 self._summaries.append(tf.summary.histogram(v.name, g))
         
         
-        self._net.set_training_ops(loss = loss, train = train)
+        self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
 
 def _safe_add(ts):
     t1, t2 = ts

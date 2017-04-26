@@ -30,7 +30,8 @@ class ExplorationPolicy(object):
 class DeepPolicyGradientController(Controller):
     def __init__(self, history_length, memory_size, state_size, action_space,
                     steps_per_epoch=10000, minibatch_size=64, final_exploration_frame=1000000,
-                    explorative_noise=None, final_epsilon=0.1, warmup_time=10000, discount=0.99):
+                    explorative_noise=None, final_epsilon=0.1, warmup_time=10000, 
+                    policy_warmup_time=20000, discount=0.99):
         action_space = ActionSpace(action_space)
         assert not action_space.is_discrete, "DeepPolicyGradientController works only on continuous action spaces"
         o = np.ones(action_space.num_actions)
@@ -43,6 +44,7 @@ class DeepPolicyGradientController(Controller):
         self._num_actions     = action_space.num_actions[0]
         self._steps_per_epoch = steps_per_epoch
         self._warmup_time     = warmup_time
+        self._policy_warmup_time = policy_warmup_time
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
         self._policy          = ExplorationPolicy(1.0, final_epsilon, final_exploration_frame, explorative_noise)
@@ -80,7 +82,12 @@ class DeepPolicyGradientController(Controller):
         summary_writer = self._summary_writer if self._step_counter % 100 == 0 else None
 
         sample = self._state_memory.sample(self._minibatch_size)
-        ls, Q = self._qnet.train_step(sample, self._session, summary_writer)
+
+        # do a few steps of critic training before using the critic to train the policy.
+        if self._epoch_counter * self._steps_per_epoch + self._step_counter < self._policy_warmup_time:
+            ls, Q = self._qnet.train_step_critic(sample, self._session, summary_writer)
+        else:
+            ls, Q = self._qnet.train_step(sample, self._session, summary_writer)
 
         # break on divergent behaviour
         if np.mean(np.abs(Q)) > 1e6:
