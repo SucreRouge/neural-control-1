@@ -146,7 +146,8 @@ class ActorCriticBuilder(NetworkBuilder):
 
             # get all further gradients
             critic_grads = critic_optimizer.compute_gradients(loss)
-            cgops = tf.group(*[u[0] for u in critic_grads if u[0] is not None], name="all_critic_gradients")
+            critic_grads = [u for u in critic_grads if u[0] is not None]
+            cgops = tf.group(*[u[0] for u in critic_grads], name="all_critic_gradients")
 
         with tf.variable_scope("policy_training"):
             tvars = tf.trainable_variables()
@@ -168,7 +169,8 @@ class ActorCriticBuilder(NetworkBuilder):
                     if summed[i] is not None:
                         summed[i] = summed[i] / batch_size
 
-            agops = tf.group(*[u for u in summed if u is not None], name="all_critic_gradients")
+            policy_grads = [u for u in zip(summed, tvars) if u[0] is not None]
+            agops = tf.group(*[u for u in summed if u is not None], name="all_policy_gradients")
 
         # then perform the update. set control dependencies to ensure that weight changes are not 
         # interleaved with gradient calculations
@@ -189,6 +191,12 @@ class ActorCriticBuilder(NetworkBuilder):
             self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
             self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
             self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
+
+        with tf.name_scope("gradient_summary"):
+            for g, v in critic_grads:
+                self._summaries.append(tf.summary.histogram(v.name, g))
+            for g, v in policy_grads:
+                self._summaries.append(tf.summary.histogram(v.name, g))
         
         
         self._net.set_training_ops(loss = loss, train = train)
