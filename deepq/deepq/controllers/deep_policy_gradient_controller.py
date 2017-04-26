@@ -80,12 +80,16 @@ class DeepPolicyGradientController(Controller):
         summary_writer = self._summary_writer if self._step_counter % 100 == 0 else None
 
         sample = self._state_memory.sample(self._minibatch_size)
-        ls = self._qnet.train_step(sample, self._session, summary_writer)
+        ls, Q = self._qnet.train_step(sample, self._session, summary_writer)
+
+        # break on divergent behaviour
+        if np.mean(np.abs(Q)) > 1e6:
+            raise Exception("Critic network seems to have diverged! Try different hyperparameters.")
 
         # in case of soft updates, we update after each train step
         if self._soft_target_update:
             self._qnet.update_target(self._session)
-        
+
         self._step_counter += 1
         if self._step_counter > self._steps_per_epoch:
             # copy target net to policy net if we do hard target updates

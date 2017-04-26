@@ -14,6 +14,9 @@ class ActorCriticNet(object):
     def set_policy(self, policy):
         self._policy = policy
 
+    def set_critic(self, critic):
+        self._critic = critic
+
     def set_bellman(self, bellman):
         self._bellman = bellman
 
@@ -32,12 +35,13 @@ class ActorCriticNet(object):
 
     def train_step(self, qs, session, summary_writer=None):
         feed = self._train_feed(qs)
+        crt = self._critic.q_value
         if summary_writer is None:
-            _, loss = session.run([self._train_step, self._train_loss], feed_dict = feed)
+            _, loss, Q = session.run([self._train_step, self._train_loss, crt], feed_dict = feed)
         else:
-            _, loss, smr, step = session.run([self._train_step, self._train_loss, self._summaries, self._global_step], feed_dict = feed)
+            _, loss, smr, step, Q = session.run([self._train_step, self._train_loss, self._summaries, self._global_step, crt], feed_dict = feed)
             summary_writer.add_summary(smr, step)
-        return loss
+        return loss, Q
 
     def set_update(self, actor, critic):
         self._actor_update  = actor
@@ -85,6 +89,7 @@ class ActorCriticBuilder(NetworkBuilder):
         action = self.make_action_input()
         v = self._critic_builder.build(name_scope="critic", var_scope="critic", inputs={"state": state, "action": action})
         self._summaries += v.summaries
+        self._net.set_critic(v)
 
         # target critic vars
         critic_target_scope = copy_variables_to_scope(v.scope, "target_vars/critic")
