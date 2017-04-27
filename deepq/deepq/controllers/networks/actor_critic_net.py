@@ -211,8 +211,10 @@ class ActorCriticBuilder(NetworkBuilder):
         with tf.name_scope("gradient_summary"):
             for g, v in critic_grads:
                 self._summaries.append(tf.summary.histogram(v.name, g))
+                self._summaries.append(tf.summary.scalar(v.name+"_mse", tf.reduce_mean(tf.square(g))))
             for g, v in policy_grads:
                 self._summaries.append(tf.summary.histogram(v.name, g))
+                self._summaries.append(tf.summary.scalar(v.name+"_mse", tf.reduce_mean(tf.square(g))))
         
         
         self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
