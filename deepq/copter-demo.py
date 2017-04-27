@@ -181,4 +181,4 @@ controller = DDPG()
 sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
-    episode_callback=episode_callback(), test_callback = test_callback())
+    episode_callback=episode_callback(), test_callback = test_callback(), logdir=logdir)

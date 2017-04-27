@@ -1,11 +1,11 @@
 import numpy as np
 from collections import namedtuple, deque
-import numbers
+import numbers, os
 
-run_result=namedtuple("RunResult", ["total_reward", "episode_length", "expected_reward", "mean_q"])
+run_result = namedtuple("RunResult", ["total_reward", "episode_length", "expected_reward", "mean_q"])
 
 class ControlRun(object):
-    def __init__(self, controller, task, test_every):
+    def __init__(self, controller, task, test_every, logdir):
         self._controller = controller
         self._task       = task
         self._on_finish_episode = None
@@ -16,6 +16,9 @@ class ControlRun(object):
 
         self._next_test  = 0
         self._test_every = test_every
+
+        self._logdir = logdir
+        self._best_performance = -1e10
 
         self.reset_task()
 
@@ -103,11 +106,14 @@ class ControlRun(object):
         result = run_result(*result)
         if self._on_test is not None:
             self._on_test(result, track)
+        if result.total_reward > self._best_performance:
+            self._best_performance = result.total_reward
+            self._controller.save(os.path.join(self._logdir, "best"))
         self.reset_task()
 
-def run(controller, task, num_frames, test_every, episode_callback=None, test_callback=None, 
+def run(controller, task, num_frames, test_every, logdir, episode_callback=None, test_callback=None, 
         test_step_callback=None, train_step_callback=None):
-    r = ControlRun(controller, task, test_every)
+    r = ControlRun(controller, task, test_every, logdir)
     r.set_callbacks(episode = episode_callback, test = test_callback, test_step = test_step_callback,
                     train_step = train_step_callback)
     r.run(num_frames)
