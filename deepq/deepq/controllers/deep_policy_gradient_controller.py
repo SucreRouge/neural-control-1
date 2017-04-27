@@ -47,7 +47,7 @@ class DeepPolicyGradientController(Controller):
         self._policy_warmup_time = policy_warmup_time
         self._next_epoch      = None
         self._minibatch_size  = minibatch_size
-        self._policy          = ExplorationPolicy(1.0, final_epsilon, final_exploration_frame, explorative_noise)
+        self._explore_policy  = ExplorationPolicy(1.0, final_epsilon, final_exploration_frame, explorative_noise)
         self._state_memory    = Memory(size=int(memory_size), history_length=history_length, state_size=state_size,
                                        action_dim = self._num_actions, action_type = float)
 
@@ -68,10 +68,10 @@ class DeepPolicyGradientController(Controller):
 
     def _get_action(self, test=False):
         action_vals   = self._qnet.get_actions(self.full_state, self.session)
-        action        = self._policy(action_vals, test)
+        action        = self._explore_policy(action_vals, test)
         action        = np.clip(action, -1, 1)
         if not test:
-            self._policy.set_stepcount(max(0, self.frame_count - self._warmup_time))
+            self._explore_policy.set_stepcount(max(0, self.frame_count - self._warmup_time))
         
         return action, action_vals
 
