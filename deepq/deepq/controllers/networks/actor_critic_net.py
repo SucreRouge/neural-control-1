@@ -69,7 +69,8 @@ class ActorCriticNet(object):
 class ActorCriticBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, 
                  soft_target_update=1e-4, discount=0.99, 
-                 critic_regularizer=None, critic_init=None, policy_init=None):
+                 critic_regularizer=None, critic_init=None, policy_init=None,
+                 track_gradients=False, clip_gradients=5):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
@@ -82,6 +83,8 @@ class ActorCriticBuilder(NetworkBuilder):
                                                   initializer = critic_init)
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net,
                                                   initializer = policy_init)
+        self._track_gradients = track_gradients
+        self._clip_gradients  = clip_gradients
 
     def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
         if gstep is None:
@@ -192,8 +195,11 @@ class ActorCriticBuilder(NetworkBuilder):
         # interleaved with gradient calculations
         with tf.name_scope("train_step"):
             with tf.control_dependencies([agops, cgops]):
-                ctrain = critic_optimizer.apply_gradients(critic_grads, global_step=self._net._global_step, name="CriticOptimizer")
-                atrain = actor_optimizer.apply_gradients(zip(summed, tvars), name="PolicyOptimizer")
+                c = self._get_clipped_gradients  # handy shortcut.
+                # clip the gradients in-place, we don't want to override the variables here
+                # because they will be accessed below for the summaries
+                ctrain = critic_optimizer.apply_gradients(c(critic_grads), global_step=self._net._global_step, name="CriticOptimizer")
+                atrain = actor_optimizer.apply_gradients(c(zip(summed, tvars)), name="PolicyOptimizer")
                 train = tf.group(ctrain, atrain, name="train_step")
 
 
@@ -209,15 +215,36 @@ class ActorCriticBuilder(NetworkBuilder):
             self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
 
         with tf.name_scope("gradient_summary"):
-            for g, v in critic_grads:
-                self._summaries.append(tf.summary.histogram(v.name, g))
-                self._summaries.append(tf.summary.scalar(v.name+"_mse", tf.reduce_mean(tf.square(g))))
-            for g, v in policy_grads:
-                self._summaries.append(tf.summary.histogram(v.name, g))
-                self._summaries.append(tf.summary.scalar(v.name+"_mse", tf.reduce_mean(tf.square(g))))
-        
+            self._summarize_gradients(critic_grads)
+            self._summarize_gradients(policy_grads)
         
         self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
+
+    def _get_clipped_gradients(self, gradients_and_vars):
+        # if no gradient clipping is set, this does nothing
+        if self._clip_gradients is None:
+            return gradients
+
+        def clip(grad, var):
+            if grad is not None:
+                clipped = tf.clip_by_norm(grad, self._clip_gradients)
+                return (clipped, var)
+            else:
+                return (grad, var)
+        clipped = [clip(*u) for u in gradients_and_vars]
+        return clipped
+
+    def _summarize_gradients(self, gradients_and_vars):
+        for g, v in gradients_and_vars:
+            with tf.name_scope(v.name.split(":")[0]):
+                if self._track_gradients:
+                    self._summaries.append(tf.summary.histogram("histogram", g))
+                
+                mean = tf.reduce_mean(g, name="mean")
+                var  = tf.reduce_mean(tf.square(g - mean), name="variance" )
+                self._summaries.append(tf.summary.scalar("mean", mean))
+                self._summaries.append(tf.summary.scalar("stdev", tf.sqrt(var)))
+        
 
 def _safe_add(ts):
     t1, t2 = ts
