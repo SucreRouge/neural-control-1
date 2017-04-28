@@ -220,7 +220,7 @@
 
   \subsection{Local Loss Minimization}
     We assume that the optimal weights change continuously, and over a time scale that is 
-    larger than time step of the discretized system. Then we can use the following approximation: The optimal weights 
+    larger than the time step of the discretized system. Then we can use the following approximation: The optimal weights 
     $\att{w^*}{k}$ at timestep $k$ are those that minimize the loss over the time interval $[\att{t}{k}, \att{t}{k+1}]$. 
     These weights should then be also close to optimal for the next timestep so that 
     $\att{w}{k+1} \leftarrow \att{w^*}{k}$.
@@ -229,7 +229,7 @@
     We assume that the control input acts as a force term $g(\control, \state, \dot{\state})$, 
     which is assumed to be a nondecreasing function of the control input $\control$,
     in addition to the force produced 
-    by the system $f(\state, \dot{\state}, t)$. This gives us 
+    by the system $f(\state, \dot{\state}, t)$. This results in
     \begin{align}
         \att{\state}{k+1} \approx \att{\state}{k} + \att{\dot{\state}}{k} \Delta t + 0.5 \cdot \Delta t^2 \left( g(\att{\control}{k}, \att{\state}{k}, \att{\dot{\state}}{k}) + f(\att{\state}{k}, \att{\dot{\state}}{k}, t) \right)
     \end{align}
@@ -252,13 +252,23 @@
     We can rescale the loss by $0.5 \Delta t^2$, and the learning rate for gradient descent by the inverse. 
     For the control parameter $P$ this gives then in particular
     \begin{align}
-        \pdiv{\att{L}{k}}{\att{P}{k}} = - \att{\error}{k} \cdot \att{\error}{k+1} \cdot g^\prime. \label{eq:diverging_p_local}
+        \pdiv{\att{L}{k}}{\att{P}{k}} = - \att{\error}{k} \cdot \att{\error}{k+1} \cdot \pdiv{g}{\att{\control}{k}}. \label{eq:diverging_p_local}
     \end{align}
     As $g^\prime \geq 0$ this value is negative except for cases when the sign of 
     $\att{\error}{k}$ and $\att{\error}{k+1}$ is different, 
-    i.e. the state $\state$ crosses the setpoint $\setpoint$ in the considered interval. 
-    Especially in the limit $\Delta t \rightarrow 0$, this will never happen and gradient descent will 
-    always increase $P$.
+    i.e. the state $\state$ crosses the setpoint $\setpoint$ in the considered interval. Since we 
+    assume that $\Delta t \ll 1$ we can further approximate
+    \begin{align}
+        \att{\error}{k+1} \approx \att{\error}{k} + \att{\dot{\error}}{k} \Delta t.
+    \end{align}
+    This results in (all values now at time $\att{t}{k}$)
+    \begin{align}
+        \pdiv{L}{P} = -(\error^2 + \error \dot{\error} \Delta t) \cdot \pdiv{g}{\control} \\
+        \pdiv{L}{D} = -(\dot{\error} \error + \dot{\error}^2 \Delta t) \cdot \pdiv{g}{\control}
+    \end{align}
+    In the limit of $\Delta t \rightarrow 0$ this causes $P$ to always increase and $D$ to increase 
+    whenever the state approaches the target, and to decrease otherwise.
+
 
     As was the case for global $L^2$ loss minimization, the algorithm again tries to act as fast as possible. 
     Since we are only working in a local approximation this may break global stability of the controlled
