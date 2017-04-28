@@ -70,7 +70,7 @@ class ActorCriticBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, 
                  soft_target_update=1e-4, discount=0.99, 
                  critic_regularizer=None, critic_init=None, policy_init=None,
-                 track_gradients=False, clip_gradients=5):
+                 track_gradients=False, clip_critic_gradients=2.0, clip_policy_gradients=0.2):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
@@ -84,7 +84,8 @@ class ActorCriticBuilder(NetworkBuilder):
         self._policy_builder = ContinuousPolicyBuilder(state_size, history_length, num_actions, policy_net,
                                                   initializer = policy_init)
         self._track_gradients = track_gradients
-        self._clip_gradients  = clip_gradients
+        self._clip_critic_gradients = clip_critic_gradients
+        self._clip_policy_gradients = clip_policy_gradients
 
     def _build(self, actor_optimizer, critic_optimizer, inputs=None, gstep=None):
         if gstep is None:
@@ -198,10 +199,16 @@ class ActorCriticBuilder(NetworkBuilder):
                 c = self._get_clipped_gradients  # handy shortcut.
                 # clip the gradients in-place, we don't want to override the variables here
                 # because they will be accessed below for the summaries
-                ctrain = critic_optimizer.apply_gradients(c(critic_grads), global_step=self._net._global_step, name="CriticOptimizer")
-                atrain = actor_optimizer.apply_gradients(c(zip(summed, tvars)), name="PolicyOptimizer")
+                clipcriticg, cgnorm = self._get_clipped_gradients(critic_grads, self._clip_critic_gradients)
+                clippolicyg, pgnorm = self._get_clipped_gradients(zip(summed, tvars), self._clip_policy_gradients)
+
+                ctrain = critic_optimizer.apply_gradients(clipcriticg, global_step=self._net._global_step, name="CriticOptimizer")
+                atrain = actor_optimizer.apply_gradients(clippolicyg, name="PolicyOptimizer")
                 train = tf.group(ctrain, atrain, name="train_step")
 
+        with tf.name_scope("gradient_summary"):
+            self._summarize_gradients(critic_grads)
+            self._summarize_gradients(policy_grads)
 
         with tf.name_scope("train_summary"):
             self._summaries.append(tf.summary.scalar("loss", loss))
@@ -211,26 +218,23 @@ class ActorCriticBuilder(NetworkBuilder):
             self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
             self._summaries.append(tf.summary.histogram("q_update", old_target_q - current_q))
             self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
+            self._summaries.append(tf.summary.scalar("critic_gradient_norm", cgnorm))
+            self._summaries.append(tf.summary.scalar("policy_gradient_norm", pgnorm))
 
-        with tf.name_scope("gradient_summary"):
-            self._summarize_gradients(critic_grads)
-            self._summarize_gradients(policy_grads)
+        
         
         self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
 
-    def _get_clipped_gradients(self, gradients_and_vars):
+    def _get_clipped_gradients(self, gradients_and_vars, norm):
         # if no gradient clipping is set, this does nothing
-        if self._clip_gradients is None:
-            return gradients
+        if norm is None:
+            return gradients_and_vars
 
-        def clip(grad, var):
-            if grad is not None:
-                clipped = tf.clip_by_norm(grad, self._clip_gradients)
-                return (clipped, var)
-            else:
-                return (grad, var)
-        clipped = [clip(*u) for u in gradients_and_vars]
-        return clipped
+        gradients = [u[0] for u in gradients_and_vars]
+        variables = [u[1] for u in gradients_and_vars]
+        clipped, norm = tf.clip_by_global_norm(gradients, clip_norm = norm)
+
+        return list(zip(clipped, variables)), norm
 
     def _summarize_gradients(self, gradients_and_vars):
         for g, v in gradients_and_vars:
@@ -238,10 +242,13 @@ class ActorCriticBuilder(NetworkBuilder):
                 if self._track_gradients:
                     self._summaries.append(tf.summary.histogram("histogram", g))
                 
-                mean = tf.reduce_mean(g, name="mean")
-                var  = tf.reduce_mean(tf.square(g - mean), name="variance" )
-                self._summaries.append(tf.summary.scalar("mean", mean))
-                self._summaries.append(tf.summary.scalar("stdev", tf.sqrt(var)))
+                # to get a sense of the size of the gradient, calculate its root mean square
+                # (I think that makes more sense than using the L^2 norm, as that depends on 
+                # the size of the variable)
+                with tf.name_scope("calc_rms"):
+                    nsq = tf.reduce_mean(tf.square(g))
+                    rms = tf.sqrt(nsq, name="rms")
+                self._summaries.append(tf.summary.scalar("rms", rms))
         
 
 def _safe_add(ts):
@@ -255,3 +262,10 @@ def _safe_add(ts):
         return t2
     else:
         return None
+
+def total_size(tensor):
+    shape = tensor.get_shape()
+    size = 1
+    for s in shape:
+        size *= s.value
+    return size
