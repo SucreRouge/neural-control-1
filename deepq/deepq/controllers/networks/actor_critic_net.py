@@ -211,8 +211,6 @@ class ActorCriticBuilder(NetworkBuilder):
             self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
             self._summaries.append(tf.summary.histogram("q_update", old_target_q - current_q))
             self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
-            self._summaries.append(tf.summary.scalar("critic_lr", critic_optimizer._lr))
-            self._summaries.append(tf.summary.scalar("policy_lr", actor_optimizer._lr))
 
         with tf.name_scope("gradient_summary"):
             self._summarize_gradients(critic_grads)

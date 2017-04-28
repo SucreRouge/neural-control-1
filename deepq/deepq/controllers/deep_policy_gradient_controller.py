@@ -141,5 +141,9 @@ class DeepPolicyGradientController(Controller):
             summaries = [tf.summary.histogram(var.name, var) for var in tf.trainable_variables()]
             self._var_summaries = tf.summary.merge(summaries)
 
+        with tf.name_scope("train_summary"):
+            self._summaries.append(tf.summary.scalar("critic_lr", critic_learning_rate))
+            self._summaries.append(tf.summary.scalar("policy_lr", actor_learning_rate))
+
         # setup saver
         self._saver = tf.train.Saver()
