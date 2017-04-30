@@ -17,6 +17,10 @@ class ActorCriticNet(object):
     def set_critic(self, critic):
         self._critic = critic
 
+    @property
+    def critic(self):
+        return self._critic
+
     def set_bellman(self, bellman):
         self._bellman = bellman
 

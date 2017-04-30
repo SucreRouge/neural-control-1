@@ -29,6 +29,10 @@ class ContinuousQNetwork(object):
     def summaries(self):
         return self._summaries
 
+    def critique(self, state, action, session):
+        feed = {self.state: state, self.action: action}
+        return session.run(self.q_value, feed_dict = feed)
+
 
 class ContinuousQBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, features, 

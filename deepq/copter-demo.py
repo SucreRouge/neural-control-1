@@ -92,6 +92,19 @@ def test_callback():
 
         controller.save(os.path.join(logdir, "copter-demo"))
 
+        # visualize thoughts
+        state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 1.0]
+        state = [state, state]
+        result = np.zeros((200, 200))
+        for (i, x) in enumerate(np.linspace(-1.0, 1.0, 200)):
+            for (j, y) in enumerate(np.linspace(-1.0, 1.0, 200)):
+                action = [i/100.0, j/100.0, 0.0, 0.0]
+                q = controller.get_Q([state], [action])
+                result[i, j] = q
+        fig, ax = plt.subplots(1,1)
+        ax.imshow(result)
+        fig.savefig(os.path.join(testdir, "q_%d.pdf"%test_counter))
+        plt.close(fig)
 
     return call
 
