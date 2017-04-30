@@ -144,8 +144,6 @@ class DeepPolicyGradientController(Controller):
         # setup saver
         self._saver = tf.train.Saver()
 
-
-    # helper functions to visualize critic "thoughts"
-    def visualize_critic(self):
-        # TODO
-        pass
+    # these might help debugging/understanding stuff
+    def get_Q(self, states, actions):
+        return self._qnet.critic.critique(state = states, action = actions, session = self.session)
