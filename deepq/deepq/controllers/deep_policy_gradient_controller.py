@@ -90,8 +90,8 @@ class DeepPolicyGradientController(Controller):
             ls, Q = self._qnet.train_step(sample, self._session, summary_writer)
 
         # break on divergent behaviour
-        if np.mean(np.abs(Q)) > 1e6:
-            raise Exception("Critic network seems to have diverged! Try different hyperparameters.")
+        if np.mean(np.abs(Q)) > 1e5:
+            raise Exception("Critic network seems to have diverged (%f)! Try different hyperparameters."%(np.mean(np.abs(Q))))
 
         # in case of soft updates, we update after each train step
         if self._soft_target_update:
@@ -143,3 +143,9 @@ class DeepPolicyGradientController(Controller):
 
         # setup saver
         self._saver = tf.train.Saver()
+
+
+    # helper functions to visualize critic "thoughts"
+    def visualize_critic(self):
+        # TODO
+        pass

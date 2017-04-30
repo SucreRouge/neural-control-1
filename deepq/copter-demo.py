@@ -62,7 +62,7 @@ def test_callback():
         fails.append(task._fail_count)
         epoch   = controller._epoch_counter
         try:
-            epsilon = controller._policy.epsilon
+            epsilon = controller._explore_policy.epsilon
         except:
             epsilon = 0
         acount  = controller.frame_count

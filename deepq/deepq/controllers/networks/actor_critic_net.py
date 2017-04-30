@@ -217,6 +217,7 @@ class ActorCriticBuilder(NetworkBuilder):
             self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
             self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
             self._summaries.append(tf.summary.histogram("q_update", old_target_q - current_q))
+            self._summaries.append(tf.summary.scalar("mean_q_update", tf.reduce_mean(old_target_q - current_q)))
             self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
             self._summaries.append(tf.summary.scalar("critic_gradient_norm", cgnorm))
             self._summaries.append(tf.summary.scalar("policy_gradient_norm", pgnorm))
@@ -226,6 +227,9 @@ class ActorCriticBuilder(NetworkBuilder):
         self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
 
     def _get_clipped_gradients(self, gradients_and_vars, norm):
+        # ensure we get an iterable list
+        gradients_and_vars = list(gradients_and_vars)
+
         # if no gradient clipping is set, this does nothing
         if norm is None:
             return gradients_and_vars
