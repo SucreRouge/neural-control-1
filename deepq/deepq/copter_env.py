@@ -73,7 +73,7 @@ class CopterEnv(gym.Env):
         err = np.max(np.abs(quad.attitude - self.target))
 
         self._steps += 1
-        done = bool(self._steps > 1000)
+        done = bool(self._steps > 100)
 
         # positive reward for not falling over
         reward = max(0.0, 0.2 * (1 - err / self.fail_threshold))

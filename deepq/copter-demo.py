@@ -19,7 +19,10 @@ def ensuredir(path):
     return path
 
 parser = argparse.ArgumentParser(description='Run the copter environment')
-parser.add_argument('-logdir', type=str, required=False, help='target directory for logfiles')
+parser.add_argument('--logdir', type=str, required=False, help='target directory for logfiles')
+parser.add_argument('--max_steps', type=int, default=5e6, help='Maximum amount of steps to simulate')
+parser.add_argument('--learning_rate', type=float, default=1e-3, help='Base learning rate for the algorithm')
+parser.add_argument('--test_interval', type=float, default=2e4, help='How many frames between successive tests')
 args = parser.parse_args()
 
 if args.logdir is None:
@@ -126,14 +129,14 @@ def PID():
                                      values = vals, targets = tgts)
     return controller
 
-def DDPG():
+def DDPG(learning_rate):
     critic_regularizer = tf.contrib.layers.l2_regularizer(1e-4)
     initializer        = tf.random_uniform_initializer(-3e-3, 3e-3)
     explorative_noise  = noise.OrnsteinUhlenbeckNoise(mu = 0.0, theta = 0.15, sigma=0.2)
 
     controller = DeepPolicyGradientController(history_length=2, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=task.action_space,
-              minibatch_size=64, final_exploration_frame=1e6, final_epsilon=0.05,
+              minibatch_size=64, final_exploration_frame=2e6, final_epsilon=0.05,
               explorative_noise=explorative_noise)
 
     def actor(state):
@@ -160,8 +163,8 @@ def DDPG():
 
     # decaing learning rates
     gstep     = tf.Variable(0, dtype=tf.int64, trainable=False, name="global_step")
-    critic_lr = tf.train.exponential_decay(1e-3, gstep, 100000, 0.95, staircase=True)
-    policy_lr = tf.train.exponential_decay(1e-4, gstep, 100000, 0.95, staircase=True)
+    critic_lr = tf.train.exponential_decay(learning_rate, gstep, 100000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(learning_rate*1e-4, gstep, 100000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
                             critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep,
@@ -169,29 +172,29 @@ def DDPG():
                             policy_init=initializer)
     return controller
 
-def DQN():
+def DQN(learning_rate):
     controller = DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=ActionSpace(task.action_space).discretized(3),
               final_exploration_frame=2e5, minibatch_size=32)
-    controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=2.5e-4)
+    controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=learning_rate)
     return controller
 
-def MultiDQN():
+def MultiDQN(learning_rate):
     controllers = [DiscreteDeepQController(history_length=10, memory_size=1e6, 
               state_size=task.observation_space.shape[0], action_space=action_space.spaces.Discrete(9),
               steps_per_epoch=20000, final_exploration_frame=5e5, minibatch_size=32) 
                   for i in range(4)]
     for (i, controller) in enumerate(controllers):
         with tf.variable_scope("controller_%d"%i):
-            controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=1.0e-4)
+            controller.setup_graph(arch, double_q=True, target_net=True, dueling=True, learning_rate=learning_rate)
     controller = NaiveMultiController(controllers, ActionSpace(task.action_space).discretized(9))
     return controller
 
 
 
-controller = DDPG()    
+controller = DDPG(learning_rate = args.learning_rate)    
 
 sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
-run(task=task, controller=controller, num_frames=2e6, test_every=2e4, 
+run(task=task, controller=controller, num_frames=args.max_steps, test_every=args.test_interval, 
     episode_callback=episode_callback(), test_callback = test_callback(), logdir=logdir)

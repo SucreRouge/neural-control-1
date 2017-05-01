@@ -138,8 +138,11 @@ class DeepPolicyGradientController(Controller):
 
         # setup variable statistics
         with tf.name_scope("weight_summaries"):
-            summaries = [tf.summary.histogram(var.name, var) for var in tf.trainable_variables()]
-            self._var_summaries = tf.summary.merge(summaries)
+            tv =  tf.trainable_variables()
+            summaries = [tf.summary.histogram(var.name, var) for var in tv]
+            wgt = [v for v in tv if "kernel" in v.name]
+            means     = tf.summary.scalar("weight_squares", tf.add_n([tf.reduce_sum(tf.square(var)) for var in wgt]))
+            self._var_summaries = tf.summary.merge(summaries+[means])
 
         # setup saver
         self._saver = tf.train.Saver()
