@@ -3,13 +3,13 @@ import numpy as np
 from collections import deque
 import time, math, tempfile, os, argparse
 from deepq import *
-from deepq.copter_env import CopterEnv
 
 import gym
 import matplotlib as mpl
 mpl.use("Agg")
 
 import matplotlib.pyplot as plt
+import gym_quadrotor
 
 def ensuredir(path):
     try:
@@ -23,6 +23,7 @@ parser.add_argument('--logdir', type=str, required=False, help='target directory
 parser.add_argument('--max_steps', type=int, default=5e6, help='Maximum amount of steps to simulate')
 parser.add_argument('--learning_rate', type=float, default=1e-3, help='Base learning rate for the algorithm')
 parser.add_argument('--test_interval', type=float, default=2e4, help='How many frames between successive tests')
+parser.add_argument('--render', type=bool, default=False, help='Render some episodes')
 args = parser.parse_args()
 
 if args.logdir is None:
@@ -57,12 +58,10 @@ def test_callback():
     reward_hist   = deque()
     expected_hist = deque()
     q_hist        = deque()
-    fails         = deque()
     def call(result, track):
         reward_hist.append(result.total_reward)
         expected_hist.append(result.expected_reward)
         q_hist.append(result.mean_q)
-        fails.append(task._fail_count)
         epoch   = controller._epoch_counter
         try:
             epsilon = controller._explore_policy.epsilon
@@ -89,8 +88,7 @@ def test_callback():
         rwd_h = np.array(reward_hist)
         exp_h = np.array(expected_hist)
         q_h   = np.array(q_hist)
-        fls   = np.array(fails)
-        c     = np.stack([rwd_h, exp_h, q_h, fls]).transpose()
+        c     = np.stack([rwd_h, exp_h, q_h]).transpose()
         np.savetxt(tstfile, c)
 
         controller.save(os.path.join(logdir, "copter-demo"))
@@ -120,7 +118,7 @@ def arch(inp):
     fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
     return fc
 
-task = CopterEnv()
+task = gym.make("Pendulum-v0")
 
 def PID():
     vals = [0, 0, 1, 2]
@@ -164,7 +162,7 @@ def DDPG(learning_rate):
     # decaing learning rates
     gstep     = tf.Variable(0, dtype=tf.int64, trainable=False, name="global_step")
     critic_lr = tf.train.exponential_decay(learning_rate, gstep, 100000, 0.95, staircase=True)
-    policy_lr = tf.train.exponential_decay(learning_rate*1e-4, gstep, 100000, 0.95, staircase=True)
+    policy_lr = tf.train.exponential_decay(learning_rate*1e-1, gstep, 100000, 0.95, staircase=True)
 
     controller.setup_graph(actor_net = actor, critic_net = critic, actor_learning_rate=policy_lr, 
                             critic_learning_rate=critic_lr, soft_target=1e-3, global_step=gstep,
@@ -194,7 +192,12 @@ def MultiDQN(learning_rate):
 
 controller = DDPG(learning_rate = args.learning_rate)    
 
+if args.render:
+    def cb(task): task.render(mode='human')
+else:
+    def cb(task): pass
 sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
 run(task=task, controller=controller, num_frames=args.max_steps, test_every=args.test_interval, 
-    episode_callback=episode_callback(), test_callback = test_callback(), logdir=logdir)
+    episode_callback=episode_callback(), test_callback = test_callback(), logdir=logdir,
+    test_step_callback=cb, train_step_callback=cb)
