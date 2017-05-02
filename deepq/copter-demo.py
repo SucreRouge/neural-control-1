@@ -118,7 +118,7 @@ def arch(inp):
     fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
     return fc
 
-task = gym.make("Pendulum-v0")
+task = gym.make("Quadrotor-v0")
 
 def PID():
     vals = [0, 0, 1, 2]
