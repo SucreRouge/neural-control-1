@@ -118,8 +118,6 @@ def arch(inp):
     fc = tf.layers.dense(flat, 256, activation=tf.nn.relu, name="fc")
     return fc
 
-task = gym.make("Quadrotor-v0")
-
 def PID():
     vals = [0, 0, 1, 2]
     tgts = [0, 6, 7, 8]
@@ -189,7 +187,8 @@ def MultiDQN(learning_rate):
     return controller
 
 
-
+task = gym.make("Quadrotor-v0")
+env = wrappers.Monitor(task, directory=os.path.join(logdir, "monitor"), force=True)
 controller = DDPG(learning_rate = args.learning_rate)    
 
 if args.render:
@@ -198,6 +197,6 @@ else:
     def cb(task): pass
 sw = tf.summary.FileWriter(logdir, graph=tf.get_default_graph(), flush_secs=30)
 controller.init(session=tf.Session(), logger=sw)
-run(task=task, controller=controller, num_frames=args.max_steps, test_every=args.test_interval, 
+run(task=env, controller=controller, num_frames=args.max_steps, test_every=args.test_interval, 
     episode_callback=episode_callback(), test_callback = test_callback(), logdir=logdir,
     test_step_callback=cb, train_step_callback=cb)
