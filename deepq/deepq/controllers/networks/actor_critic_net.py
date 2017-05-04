@@ -188,7 +188,7 @@ class ActorCriticBuilder(NetworkBuilder):
             with tf.name_scope("combine_gradients"):
                 with tf.name_scope("batch_size"):
                     batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
-                summed = list(map(_safe_add, zip(pgrads, reggrads)))
+                summed = apply_binary_op(pgrads, reggrads, tf.add)
                 for i in range(len(summed)):
                     if summed[i] is not None:
                         summed[i] = summed[i] / batch_size
@@ -211,8 +211,8 @@ class ActorCriticBuilder(NetworkBuilder):
                 train = tf.group(ctrain, atrain, name="train_step")
 
         with tf.name_scope("gradient_summary"):
-            self._summarize_gradients(critic_grads)
-            self._summarize_gradients(policy_grads)
+            summarize_gradients(critic_grads, self._track_gradients)
+            summarize_gradients(policy_grads, self._track_gradients)
 
         with tf.name_scope("train_summary"):
             self._summaries.append(tf.summary.scalar("loss", loss))
@@ -243,37 +243,3 @@ class ActorCriticBuilder(NetworkBuilder):
         clipped, norm = tf.clip_by_global_norm(gradients, clip_norm = norm)
 
         return list(zip(clipped, variables)), norm
-
-    def _summarize_gradients(self, gradients_and_vars):
-        for g, v in gradients_and_vars:
-            with tf.name_scope(v.name.split(":")[0]):
-                if self._track_gradients:
-                    self._summaries.append(tf.summary.histogram("histogram", g))
-                
-                # to get a sense of the size of the gradient, calculate its root mean square
-                # (I think that makes more sense than using the L^2 norm, as that depends on 
-                # the size of the variable)
-                with tf.name_scope("calc_rms"):
-                    nsq = tf.reduce_mean(tf.square(g))
-                    rms = tf.sqrt(nsq, name="rms")
-                self._summaries.append(tf.summary.scalar("rms", rms))
-        
-
-def _safe_add(ts):
-    t1, t2 = ts
-    if t1 is not None:
-        if t2 is not None:
-            return t1 + t2
-        else:
-            return t1
-    elif t2 is not None:
-        return t2
-    else:
-        return None
-
-def total_size(tensor):
-    shape = tensor.get_shape()
-    size = 1
-    for s in shape:
-        size *= s.value
-    return size

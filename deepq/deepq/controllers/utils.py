@@ -1,4 +1,5 @@
 import tensorflow as tf
+import collections
 
 def current_name_scope():
     return tf.get_default_graph()._name_stack + "/"
@@ -66,3 +67,58 @@ def copy_variables_to_scope(source_scope, target_scope, trainable=None):
                 source_name = source_name.split(":")[0]
                 newvar = tf.get_variable(name = source_name, initializer = var.initialized_value(), trainable=trainable)
     return tscope
+
+def summarize_gradients(gradients_and_vars, histograms = False):
+    summaries = []
+    for g, v in gradients_and_vars:
+        with tf.name_scope(v.name.split(":")[0]):
+            if histograms:
+                summaries.append(tf.summary.histogram("histogram", g))
+            
+            # to get a sense of the size of the gradient, calculate its root mean square
+            # (I think that makes more sense than using the L^2 norm, as that depends on 
+            # the size of the variable)
+            with tf.name_scope("calc_rms"):
+                nsq = tf.reduce_mean(tf.square(g))
+                rms = tf.sqrt(nsq, name="rms")
+            summaries.append(tf.summary.scalar("rms", rms))
+    return tf.summary.merge(summaries, name="gradient_summary")
+        
+
+def total_size(tensor):
+    shape = tensor.get_shape()
+    size = 1
+    for s in shape:
+        size *= s.value
+    return size
+
+def apply_binary_op(a, b, op, **kwargs):
+    """ applies the binary operation op to a and b
+        if either of them is None, the other is returned,
+        if both are None, None is returned.
+
+        If a and b are iterables, this applies op 
+        elementwise and returns a list.
+    """
+
+    if isinstance(a, collections.Iterable):
+        if not isinstance(b, collections.Iterable):
+            b = repeat(b)
+    elif isinstance(b, collections.Iterable):
+        a = repeat(a)
+    else:
+        return _apply_binary_op(a, b, op, **kwargs)
+
+    # if we get to here, we have to iterables
+    return list(map(lambda x:_apply_binary_op(x[0], x[1], op, **kwargs), zip(a, b)))
+
+def _apply_binary_op(a, b, op, **kwargs):
+    if a is not None:
+        if b is not None:
+            return op(a, b, **kwargs)
+        else:
+            return a
+    elif b is not None:
+        return b
+    else:
+        return None
