@@ -71,6 +71,11 @@ def copy_variables_to_scope(source_scope, target_scope, trainable=None):
 def summarize_gradients(gradients_and_vars, histograms = False):
     summaries = []
     for g, v in gradients_and_vars:
+        # don't summarize anything if no gradient is provided
+        if g is None:
+            continue
+
+        # otherwise put into scope of variable name
         with tf.name_scope(v.name.split(":")[0]):
             if histograms:
                 summaries.append(tf.summary.histogram("histogram", g))

@@ -175,24 +175,21 @@ class ActorCriticBuilder(NetworkBuilder):
 
         with tf.variable_scope("policy_training"):
             tvars = tf.trainable_variables()
+             with tf.name_scope("batch_size"):
+                batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
+
             # Policy Gradient update of policy
             grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
             with tf.name_scope("policy_gradient"):
                 # note the minus here: we want to increase the expected return, so we do gradient ascent!
-                pgrads = tf.gradients(policy.action, tvars, -grad_a, name="policy_gradient")
+                pgrads = tf.gradients(policy.action, tvars, -grad_a / batch_size , name="policy_gradient")
 
             with tf.name_scope("regularizer_gradient"):
                 policy_reg_loss = tf.reduce_sum(policy._regularizers)
                 reggrads = tf.gradients(policy_reg_loss, tvars, name="reg_gradient")
 
             with tf.name_scope("combine_gradients"):
-                with tf.name_scope("batch_size"):
-                    batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
                 summed = apply_binary_op(pgrads, reggrads, tf.add)
-                for i in range(len(summed)):
-                    if summed[i] is not None:
-                        summed[i] = summed[i] / batch_size
-
             policy_grads = [u for u in zip(summed, tvars) if u[0] is not None]
             agops = tf.group(*[u for u in summed if u is not None], name="all_policy_gradients")
 
