@@ -1,6 +1,7 @@
 from ..utils import *
 import tensorflow as tf
 import numpy as np
+from itertools import chain
 from . import ContinuousQBuilder, NetworkBuilder, ContinuousPolicyBuilder, ContinuousBellmanBuilder
 
 class ActorCriticNet(object):
@@ -74,7 +75,7 @@ class ActorCriticBuilder(NetworkBuilder):
     def __init__(self, state_size, history_length, num_actions, policy_net, critic_net, 
                  soft_target_update=1e-4, discount=0.99, 
                  critic_regularizer=None, critic_init=None, policy_init=None,
-                 track_gradients=False, clip_critic_gradients=2.0, clip_policy_gradients=0.2):
+                 track_gradients=False, clip_critic_gradients=20.0, clip_policy_gradients=2.0):
         super(ActorCriticBuilder, self).__init__(state_size     = state_size, 
                                                  history_length = history_length, 
                                                  num_actions    = num_actions)
@@ -151,31 +152,19 @@ class ActorCriticBuilder(NetworkBuilder):
         return self._net
 
     def _build_training(self, actor_optimizer, critic_optimizer, critic, policy, target_q, policy_critic):
-        current_q = critic.q_value
-        # calculate all the required gradients
-        with tf.variable_scope("critic_training"):
-            # ensure target_q is never too far from current_q
-            with tf.name_scope("clipped_target"):
-                bound    = 1
-                old_target_q = target_q
-                distance = tf.clip_by_value(target_q - current_q, -bound, bound)
-                target_q = current_q + distance
+        # prepare name scopes for the summary ops
+        with tf.name_scope("gradient_summary") as gsns:
+            self._gradient_summary_name_scope = gsns
 
-            mse_loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
+        with tf.name_scope("train_summary") as tsns:
+            self._train_summary_name_scope = tsns
 
-            # regularization
-            with tf.name_scope("regularization_loss"):
-                critic_reg_loss = tf.reduce_sum(critic._regularizers)
-            loss = mse_loss + critic_reg_loss
 
-            # get all further gradients
-            critic_grads = critic_optimizer.compute_gradients(loss)
-            critic_grads = [u for u in critic_grads if u[0] is not None]
-            cgops = tf.group(*[u[0] for u in critic_grads], name="all_critic_gradients")
+        cgops, critic_grads, loss = self._build_critic_gradients(critic_optimizer, critic, target_q)
 
         with tf.variable_scope("policy_training"):
             tvars = tf.trainable_variables()
-             with tf.name_scope("batch_size"):
+            with tf.name_scope("batch_size"):
                 batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
 
             # Policy Gradient update of policy
@@ -197,35 +186,78 @@ class ActorCriticBuilder(NetworkBuilder):
         # interleaved with gradient calculations
         with tf.name_scope("train_step"):
             with tf.control_dependencies([agops, cgops]):
-                c = self._get_clipped_gradients  # handy shortcut.
                 # clip the gradients in-place, we don't want to override the variables here
                 # because they will be accessed below for the summaries
-                clipcriticg, cgnorm = self._get_clipped_gradients(critic_grads, self._clip_critic_gradients)
                 clippolicyg, pgnorm = self._get_clipped_gradients(zip(summed, tvars), self._clip_policy_gradients)
 
-                ctrain = critic_optimizer.apply_gradients(clipcriticg, global_step=self._net._global_step, name="CriticOptimizer")
+                ctrain = critic_optimizer.apply_gradients(critic_grads, global_step=self._net._global_step, name="CriticOptimizer")
                 atrain = actor_optimizer.apply_gradients(clippolicyg, name="PolicyOptimizer")
                 train = tf.group(ctrain, atrain, name="train_step")
 
-        with tf.name_scope("gradient_summary"):
-            summarize_gradients(critic_grads, self._track_gradients)
+        with tf.name_scope(gsns):
             summarize_gradients(policy_grads, self._track_gradients)
 
-        with tf.name_scope("train_summary"):
-            self._summaries.append(tf.summary.scalar("loss", loss))
-            self._summaries.append(tf.summary.scalar("q_error", mse_loss))
-            self._summaries.append(tf.summary.scalar("critic_regularizer", critic_reg_loss))
+        with tf.name_scope(tsns):
             self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
             self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
-            self._summaries.append(tf.summary.histogram("td_error", old_target_q - current_q))
-            self._summaries.append(tf.summary.scalar("mean_td_error", tf.reduce_mean(old_target_q - current_q)))
-            self._summaries.append(tf.summary.histogram("clipped_q_update", target_q - current_q))
-            self._summaries.append(tf.summary.scalar("critic_gradient_norm", cgnorm))
             self._summaries.append(tf.summary.scalar("policy_gradient_norm", pgnorm))
+            self._summaries.append(tf.summary.scalar("improvement", tf.reduce_mean(policy_critic.q_value - critic.q_value)))
 
         
         
         self._net.set_training_ops(loss = loss, train = train, train_critic = ctrain)
+
+    def _build_critic_gradients(self, critic_optimizer, critic, target_q):
+        """ 
+            This function calculates the gradients that are required for critic training.
+        """
+        current_q = critic.q_value
+        # calculate all the required gradients
+        with tf.variable_scope("critic_training"):
+            # ensure target_q is never too far from current_q
+            with tf.name_scope("clipped_target"):
+                bound    = 1
+                old_target_q = target_q
+                distance = tf.clip_by_value(target_q - current_q, -bound, bound)
+                target_q = current_q + distance
+
+            mse_loss = tf.losses.mean_squared_error(current_q, tf.stop_gradient(target_q), scope='loss')
+
+            # regularization
+            with tf.name_scope("regularization"):
+                reg_loss = tf.reduce_sum(critic._regularizers, name="loss")
+                reg_grads = critic_optimizer.compute_gradients(reg_loss)
+
+            # calculate critic gradients and make an op that waits for all gradients to be computed
+            grads = critic_optimizer.compute_gradients(mse_loss)
+            with tf.name_scope("all_gradients"):
+                cgops = tf.group(*[u[0] for u in chain(grads, reg_grads) if u[0] is not None], name="all_gradients")
+            
+            # apply clipping to the gradients
+            clipped, cgnorm = self._get_clipped_gradients(grads, self._clip_critic_gradients)
+
+            # now combine gradients
+            with tf.name_scope("combine_gradients"):
+                grads = apply_binary_op([c[0] for c in clipped], [g[0] for g in reg_grads], tf.add)
+                grads = list(zip(grads, tf.trainable_variables()))
+
+            loss = mse_loss + reg_loss
+
+            
+
+        with tf.name_scope(self._train_summary_name_scope):
+            self._summaries.append(tf.summary.scalar("loss", loss))
+            self._summaries.append(tf.summary.scalar("q_error", mse_loss))
+            self._summaries.append(tf.summary.scalar("critic_regularizer", reg_loss))
+            self._summaries.append(tf.summary.histogram("td_error", old_target_q - current_q))
+            self._summaries.append(tf.summary.scalar("mean_td_error", tf.reduce_mean(old_target_q - current_q)))
+            self._summaries.append(tf.summary.histogram("clipped_td_error", target_q - current_q))
+            self._summaries.append(tf.summary.scalar("critic_gradient_norm", cgnorm))
+
+        with tf.name_scope(self._gradient_summary_name_scope):
+            summarize_gradients(grads, self._track_gradients)
+
+        return cgops, grads, loss
 
     def _get_clipped_gradients(self, gradients_and_vars, norm):
         # ensure we get an iterable list

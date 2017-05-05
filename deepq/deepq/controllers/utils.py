@@ -88,7 +88,6 @@ def summarize_gradients(gradients_and_vars, histograms = False):
                 rms = tf.sqrt(nsq, name="rms")
             summaries.append(tf.summary.scalar("rms", rms))
     return tf.summary.merge(summaries, name="gradient_summary")
-        
 
 def total_size(tensor):
     shape = tensor.get_shape()
@@ -122,8 +121,8 @@ def _apply_binary_op(a, b, op, **kwargs):
         if b is not None:
             return op(a, b, **kwargs)
         else:
-            return a
+            return tf.identity(a)
     elif b is not None:
-        return b
+        return tf.identity(b)
     else:
         return None
