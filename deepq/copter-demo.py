@@ -71,20 +71,8 @@ def test_callback():
         test_counter = len(reward_hist)
 
         # plot the test run
-        fig, ax = plt.subplots(1,1)
-        ax.set_title("Epoch: %d , Epsilon=%.1f%%, Score=%.2f"%(epoch, epsilon*100, result.total_reward))
-        ax.set_autoscaley_on(False)
-        ax.set_ylim([-25, 25])
-
-        ax.plot(track[:, 6] * 180/math.pi)              # y
-        ax.plot(track[:, 7] * 180/math.pi)              # c
-        ax.plot(track[:, 8] * 180/math.pi)              # c
-        ax.plot(track[:, 12] * 180/math.pi)              # x
-        ax.plot(track[:, 13] * 180/math.pi)              # x
-        ax.plot(track[:, 14] * 180/math.pi)              # x
-        fig.savefig(os.path.join(testdir, "test_%d.pdf"%test_counter))
-        plt.close(fig)
-
+        lp = os.path.join(testdir, "test_%d.txt--"%test_counter)
+        np.savetxt(lp, track)
         rwd_h = np.array(reward_hist)
         exp_h = np.array(expected_hist)
         q_h   = np.array(q_hist)
@@ -93,6 +81,7 @@ def test_callback():
 
         controller.save(os.path.join(logdir, "copter-demo"))
 
+        """
         # visualize thoughts
         state = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 1.0]
         state = [state, state]
@@ -106,7 +95,7 @@ def test_callback():
         ax.imshow(result)
         fig.savefig(os.path.join(testdir, "q_%d.pdf"%test_counter))
         plt.close(fig)
-
+        """
     return call
 
 def arch(inp):
