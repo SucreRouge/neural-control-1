@@ -24,6 +24,7 @@ parser.add_argument('--max_steps', type=int, default=5e6, help='Maximum amount o
 parser.add_argument('--learning_rate', type=float, default=1e-3, help='Base learning rate for the algorithm')
 parser.add_argument('--test_interval', type=float, default=2e4, help='How many frames between successive tests')
 parser.add_argument('--render', type=bool, default=False, help='Render some episodes')
+parser.add_argument('--task', type=str, default="Pendulum-v0", help='The gym environment to load')
 args = parser.parse_args()
 
 if args.logdir is None:
@@ -176,8 +177,8 @@ def MultiDQN(learning_rate):
     return controller
 
 
-task = gym.make("Quadrotor-v0")
-env = wrappers.Monitor(task, directory=os.path.join(logdir, "monitor"), force=True)
+task = gym.make(args.task)
+env = gym.wrappers.Monitor(task, directory=os.path.join(logdir, "monitor"), force=True)
 controller = DDPG(learning_rate = args.learning_rate)    
 
 if args.render:
