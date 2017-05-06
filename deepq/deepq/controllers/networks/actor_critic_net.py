@@ -161,46 +161,21 @@ class ActorCriticBuilder(NetworkBuilder):
 
 
         cgops, critic_grads, loss = self._build_critic_gradients(critic_optimizer, critic, target_q)
-
-        with tf.variable_scope("policy_training"):
-            tvars = tf.trainable_variables()
-            with tf.name_scope("batch_size"):
-                batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
-
-            # Policy Gradient update of policy
-            grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
-            with tf.name_scope("policy_gradient"):
-                # note the minus here: we want to increase the expected return, so we do gradient ascent!
-                pgrads = tf.gradients(policy.action, tvars, -grad_a / batch_size , name="policy_gradient")
-
-            with tf.name_scope("regularizer_gradient"):
-                policy_reg_loss = tf.reduce_sum(policy._regularizers)
-                reggrads = tf.gradients(policy_reg_loss, tvars, name="reg_gradient")
-
-            with tf.name_scope("combine_gradients"):
-                summed = apply_binary_op(pgrads, reggrads, tf.add)
-            policy_grads = [u for u in zip(summed, tvars) if u[0] is not None]
-            agops = tf.group(*[u for u in summed if u is not None], name="all_policy_gradients")
+        agops, policy_grads = self._build_actor_training(actor_optimizer, policy, policy_critic)
 
         # then perform the update. set control dependencies to ensure that weight changes are not 
         # interleaved with gradient calculations
         with tf.name_scope("train_step"):
             with tf.control_dependencies([agops, cgops]):
-                # clip the gradients in-place, we don't want to override the variables here
-                # because they will be accessed below for the summaries
-                clippolicyg, pgnorm = self._get_clipped_gradients(zip(summed, tvars), self._clip_policy_gradients)
-
+                # we do two optimization steps here. Only one should increase the global_step,
+                # so we pass global_step only to the critic optimizer.
                 ctrain = critic_optimizer.apply_gradients(critic_grads, global_step=self._net._global_step, name="CriticOptimizer")
-                atrain = actor_optimizer.apply_gradients(clippolicyg, name="PolicyOptimizer")
+                atrain = actor_optimizer.apply_gradients(policy_grads, name="PolicyOptimizer")
                 train = tf.group(ctrain, atrain, name="train_step")
 
-        with tf.name_scope(gsns):
-            summarize_gradients(policy_grads, self._track_gradients)
-
         with tf.name_scope(tsns):
-            self._summaries.append(tf.summary.scalar("policy_regularizer", policy_reg_loss))
-            self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
-            self._summaries.append(tf.summary.scalar("policy_gradient_norm", pgnorm))
+            # if we assume that the Q function is correct, this tells us how much 
+            # the polic has improved compared to steps in the replay buffer
             self._summaries.append(tf.summary.scalar("improvement", tf.reduce_mean(policy_critic.q_value - critic.q_value)))
 
         
@@ -258,6 +233,42 @@ class ActorCriticBuilder(NetworkBuilder):
             summarize_gradients(grads, self._track_gradients)
 
         return cgops, grads, loss
+
+    def _build_actor_training(self, actor_optimizer, policy, policy_critic):
+        with tf.variable_scope("policy_training"):
+            tvars = tf.trainable_variables()
+            with tf.name_scope("batch_size"):
+                batch_size = tf.to_float(tf.shape(policy_critic.action)[0])
+
+            # Policy Gradient update of policy
+            grad_a = tf.identity(tf.gradients(policy_critic.q_value, [policy_critic.action], name="action_gradient")[0], name="dQ_da")
+            # note the minus here: we want to increase the expected return, so we do gradient ascent!
+            grads = actor_optimizer.compute_gradients(policy.action, tvars, grad_loss=-grad_a / batch_size)
+
+            # regularization
+            with tf.name_scope("regularization"):
+                reg_loss = tf.reduce_sum(policy._regularizers, name="loss")
+                reg_grads = actor_optimizer.compute_gradients(reg_loss)
+
+            with tf.name_scope("all_gradients"):
+                agops = tf.group(*[u[0] for u in chain(grads, reg_grads) if u[0] is not None], name="all_gradients")
+
+            
+            clipped, norm = self._get_clipped_gradients(grads, self._clip_policy_gradients)
+            # now combine gradients
+            with tf.name_scope("combine_gradients"):
+                grads = apply_binary_op([c[0] for c in clipped], [g[0] for g in reg_grads], tf.add)
+                grads = list(zip(grads, tf.trainable_variables()))
+
+        with tf.name_scope(self._train_summary_name_scope):
+            self._summaries.append(tf.summary.scalar("policy_regularizer", reg_loss))
+            self._summaries.append(tf.summary.histogram("policy_gradient", grad_a))
+            self._summaries.append(tf.summary.scalar("policy_gradient_norm", norm))
+
+        with tf.name_scope(self._gradient_summary_name_scope):
+            summarize_gradients(grads, self._track_gradients)
+
+        return agops, grads
 
     def _get_clipped_gradients(self, gradients_and_vars, norm):
         # ensure we get an iterable list
