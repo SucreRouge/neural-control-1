@@ -114,6 +114,10 @@ class DeepPolicyGradientController(Controller):
     def save(self, name):
         self._saver.save(self.session, name, global_step=self._qnet.global_step)
 
+    def load(self, name):
+        # TODO save/restore does not restore replay memory! Fix!
+        self._saver.restore(self.session, name)
+
     def setup_graph(self, actor_net, critic_net, graph = None, actor_learning_rate = 1e-4, critic_learning_rate = 1e-3, 
                           soft_target = False, global_step = None, critic_regularizer = None,
                           critic_init = None, policy_init = None):
