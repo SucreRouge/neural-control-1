@@ -102,6 +102,13 @@ class ControlRun(object):
         # exemplary test to generate track
         result, track = self.run_episode(test=True, record=True, onstep=self._on_test_step)
         results += [result]
+
+        # returns, durations
+        returns = [r.total_reward for r in results]
+        durations = [r.episode_length for r in results]
+        self._controller.log_test_results(returns = returns, durations = durations)
+
+
         result = np.mean(results, axis=0)
         result = run_result(*result)
         if self._on_test is not None:

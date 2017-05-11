@@ -92,6 +92,11 @@ class Controller(object):
         
         self._observe(state = state, last = last_state, reward = reward, action = action, test = test)
 
+    def log_test_results(self, returns, durations):
+        feed = {self._testsum_lg: durations, self._testsum_rt: returns}
+        smr  = self._session.run(self._testsum, feed_dict = feed)
+        self._summary_writer.add_summary(smr, self._frame_count)
+
     def get_action(self, test = False):
         a, v = self._get_action(test)
         self._last_action = a
@@ -114,14 +119,28 @@ class Controller(object):
         self._summary_writer = logger
 
         with tf.name_scope("episode_summaries"):
-            rt  = tf.placeholder(tf.float32, shape=[], name="return_")
-            lg  = tf.placeholder(tf.int32,   shape=[], name="duration_")
+            with tf.name_scope("inputs"):
+                rt  = tf.placeholder(tf.float32, shape=[], name="return")
+                lg  = tf.placeholder(tf.int32,   shape=[], name="duration")
+                tr  = tf.placeholder(tf.float32,   shape=[None], name="test_return")
+                td  = tf.placeholder(tf.int32,   shape=[None], name="test_duration")
+            
+            # single episode summary
             rts = tf.summary.scalar("return", rt)
             lgs = tf.summary.scalar("duration", lg)
             sms = tf.summary.merge([rts, lgs])
             self._epsum = sms
             self._epsum_rt = rt
             self._epsum_lg = lg
+
+            # test episode summary
+            test_ret = tf.summary.histogram("test_return", tr)
+            test_dur = tf.summary.histogram("test_duration", td)
+            test_aret = tf.summary.scalar("avg_test_return", tf.reduce_mean(tr))
+            test_adur = tf.summary.scalar("avg_test_duration", tf.reduce_mean(tf.cast(td, tf.float32)))
+            self._testsum_rt = tr
+            self._testsum_lg = td
+            self._testsum = tf.summary.merge([test_ret, test_dur, test_aret, test_adur])
 
         # this might be a bit wasteful! I don't know.
         self._session.run([tf.global_variables_initializer()])
